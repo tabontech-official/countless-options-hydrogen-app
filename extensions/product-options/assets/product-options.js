@@ -151,6 +151,8 @@
         if (shown) shown.textContent = value && `: ${value}`;
         field.querySelector("[data-po-required]")?.setCustomValidity(value ? "" : root.dataset.poPickOne);
       }
+      // CSS dims the section's buy buttons while this is set.
+      root.classList.toggle("po--blocked", controls.some((c) => !c.checkValidity()));
       render();
       mirror();
     };

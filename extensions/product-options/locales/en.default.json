@@ -2,6 +2,7 @@
   "product_options": {
     "choose": "Choose an option",
     "pick_one": "Select at least one option.",
+    "required_hint": "Complete the required options (*) to add to cart.",
     "summary": "Selected options",
     "options_total": "Options total",
     "grand_total": "Total with options",
