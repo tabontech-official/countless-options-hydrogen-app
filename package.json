@@ -1,5 +1,5 @@
 {
-  "name": "infinite-option",
+  "name": "countless-options",
   "private": true,
   "scripts": {
     "build": "prisma generate && prisma migrate deploy && react-router build",

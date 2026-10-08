@@ -77,10 +77,10 @@
   grid-template-columns: 36px 1fr;
   margin: 0;
 }
-.home :global(.co-brand__mark) {
+.home :global(.co-brand__logo) {
   inline-size: 36px;
   block-size: 36px;
-  font-size: 20px;
+  border-radius: 9px;
 }
 .home :global(.co-brand strong) {
   font-size: 16px;

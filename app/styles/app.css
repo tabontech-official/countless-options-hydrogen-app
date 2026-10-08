@@ -197,17 +197,14 @@ textarea {
   align-items: center;
   margin-block-end: 22px;
 }
-.co-brand__mark {
-  display: grid;
-  place-items: center;
+/* public/logo.png is full-bleed artwork, so it fills the tile like an app icon. */
+.co-brand__logo {
+  display: block;
   inline-size: 44px;
   block-size: 44px;
   border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 0 0 1px var(--co-line);
-  font-size: 24px;
-  line-height: 1;
-  color: var(--co-ink);
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--co-line), 0 4px 10px -4px rgba(30, 20, 60, 0.25);
 }
 .co-brand strong,
 .co-brand small {
