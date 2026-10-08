@@ -100,6 +100,7 @@
     const mirror = () => {
       const form = findForm(root);
       if (!form) return;
+      form.toggleAttribute("data-po-blocked", root.classList.contains("po--blocked"));
       let box = form.querySelector(`[data-po-mirror="${root.id}"]`);
       if (!box) {
         box = el("div", { hidden: true });
@@ -151,7 +152,7 @@
         if (shown) shown.textContent = value && `: ${value}`;
         field.querySelector("[data-po-required]")?.setCustomValidity(value ? "" : root.dataset.poPickOne);
       }
-      // CSS dims the section's buy buttons while this is set.
+      // mirror() copies this onto the form so CSS dims its buy buttons.
       root.classList.toggle("po--blocked", controls.some((c) => !c.checkValidity()));
       render();
       mirror();

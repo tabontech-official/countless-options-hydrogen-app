@@ -313,15 +313,15 @@ select.po__input option {
   color: var(--po-error);
 }
 
-/* Required options missing: dim the section's add to cart / Buy it now. They stay clickable so
-   the guard in product-options.js can point at the missing field; accelerated checkout children
+/* Required options missing (product-options.js flags the form): dim add to cart / Buy it now.
+   They stay clickable so the guard can point at the missing field; accelerated checkout children
    (PayPal etc. live in iframes the guard can't see) get no clicks at all. */
-.shopify-section:has(.po--blocked) form[action*="/cart/add"] :is([type="submit"], [name="add"], .shopify-payment-button) {
+form[data-po-blocked] :is([type="submit"], [name="add"], .shopify-payment-button) {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.shopify-section:has(.po--blocked) form[action*="/cart/add"] .shopify-payment-button > * {
+form[data-po-blocked] .shopify-payment-button > * {
   pointer-events: none;
 }
 
