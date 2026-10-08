@@ -1,0 +1,89 @@
+{
+  "payload": {
+    "export": "cart-transform-run",
+    "target": "cart.transform.run",
+    "input": {
+      "presentmentCurrencyRate": "1.0",
+      "cartTransform": { "addonVariant": { "value": "gid://shopify/ProductVariant/999" } },
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "selection": { "value": "{\"f1\":[\"Large\",\"Small\"],\"f2\":[\"Gift wrap\",\"Card\",\"Bogus\"],\"f3\":\"John\",\"f4\":\" Hi \",\"f5\":\"Serif\"}" },
+            "sellingPlanAllocation": null,
+            "cost": { "amountPerQuantity": { "amount": "100.0", "currencyCode": "USD" } },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    { "id": "f1", "type": "radio", "label": "Size", "required": true, "choices": [{ "label": "Small" }, { "label": "Large", "price": 5 }] },
+                    { "id": "f2", "type": "checkboxes", "label": "Extras", "required": false, "choices": [{ "label": "Gift wrap", "price": 2 }, { "label": "Card", "price": 1.5 }] },
+                    { "id": "f3", "type": "text", "label": "Engraving", "required": false, "price": 10, "condition": { "fieldId": "f1", "values": ["Large"] } },
+                    { "id": "f4", "type": "text", "label": "Note", "required": false },
+                    { "id": "f5", "type": "select", "label": "Font", "required": false, "choices": [{ "label": "Serif", "price": 3 }], "condition": { "fieldId": "f1", "values": ["Small"] } }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "selection": { "value": "{\"f1\":\"Large\"}" },
+            "sellingPlanAllocation": { "sellingPlan": { "id": "gid://shopify/SellingPlan/1" } },
+            "cost": { "amountPerQuantity": { "amount": "100.0", "currencyCode": "USD" } },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": { "options": { "jsonValue": [{ "id": "f1", "type": "radio", "label": "Size", "required": true, "choices": [{ "label": "Large", "price": 5 }] }] } }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/3",
+            "selection": { "value": "not json" },
+            "sellingPlanAllocation": null,
+            "cost": { "amountPerQuantity": { "amount": "20.0", "currencyCode": "USD" } },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/3",
+              "product": { "options": { "jsonValue": [{ "id": "f1", "type": "text", "label": "Name", "required": false, "price": 4 }] } }
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/1",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": { "adjustment": { "fixedPricePerUnit": { "amount": "100.0" } } },
+                "attributes": [
+                  { "key": "Size", "value": "Large" },
+                  { "key": "Extras", "value": "Gift wrap, Card" },
+                  { "key": "Engraving", "value": "John" },
+                  { "key": "Note", "value": "Hi" }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": { "adjustment": { "fixedPricePerUnit": { "amount": "18.50" } } },
+                "attributes": [
+                  { "key": "Size", "value": "Large (+5.00 USD)" },
+                  { "key": "Extras", "value": "Gift wrap, Card (+3.50 USD)" },
+                  { "key": "Engraving", "value": "John (+10.00 USD)" }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

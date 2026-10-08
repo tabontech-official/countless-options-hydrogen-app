@@ -1,0 +1,14 @@
+{
+  "product_options": {
+    "choose": "Choose an option",
+    "pick_one": "Select at least one option.",
+    "summary": "Selected options",
+    "options_total": "Options total",
+    "grand_total": "Total with options",
+    "each": "each",
+    "per": "per",
+    "decrease": "Decrease",
+    "increase": "Increase",
+    "empty": "Product options: this product isn't in an active option set yet. Assign it in the app to show fields here."
+  }
+}

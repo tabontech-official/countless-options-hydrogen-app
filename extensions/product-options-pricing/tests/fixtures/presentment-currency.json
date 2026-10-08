@@ -1,0 +1,48 @@
+{
+  "payload": {
+    "export": "cart-transform-run",
+    "target": "cart.transform.run",
+    "input": {
+      "presentmentCurrencyRate": "1.5",
+      "cartTransform": { "addonVariant": { "value": "gid://shopify/ProductVariant/999" } },
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "selection": { "value": "{\"f1\":\"Yes\"}" },
+            "sellingPlanAllocation": null,
+            "cost": { "amountPerQuantity": { "amount": "150.0", "currencyCode": "EUR" } },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": { "options": { "jsonValue": [{ "id": "f1", "type": "checkbox", "label": "Gift box", "required": false, "price": 3.3 }] } }
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/1",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": { "adjustment": { "fixedPricePerUnit": { "amount": "150.0" } } },
+                "attributes": [{ "key": "Gift box", "value": "Yes" }]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": { "adjustment": { "fixedPricePerUnit": { "amount": "4.95" } } },
+                "attributes": [{ "key": "Gift box", "value": "Yes (+4.95 EUR)" }]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

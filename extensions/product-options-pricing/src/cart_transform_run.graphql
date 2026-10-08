@@ -1,0 +1,38 @@
+query CartTransformRunInput {
+  presentmentCurrencyRate
+  cartTransform {
+    addonVariant: metafield(namespace: "$app", key: "addon_variant") {
+      value
+    }
+  }
+  cart {
+    lines {
+      id
+      selection: attribute(key: "_options") {
+        value
+      }
+      sellingPlanAllocation {
+        sellingPlan {
+          id
+        }
+      }
+      cost {
+        amountPerQuantity {
+          amount
+          currencyCode
+        }
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            options: metafield(namespace: "$app", key: "options") {
+              jsonValue
+            }
+          }
+        }
+      }
+    }
+  }
+}

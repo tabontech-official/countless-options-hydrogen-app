@@ -1,0 +1,159 @@
+{%- comment -%}
+  Renders the fields the app syncs into the product's `$app.options` metafield.
+  The visible inputs have no `properties[...]` names: product-options.js copies each filled
+  value into hidden inputs inside the theme's add-to-cart form (where Shopify reads line item
+  properties), plus a hidden `_options` property the pricing function charges from.
+  Prices (`data-po-price`) are in the shop currency; the script converts them for display.
+{%- endcomment -%}
+{%- assign fields = product.metafields["$app"].options.value -%}
+{%- if fields != blank -%}
+  <div
+    class="po"
+    id="po-{{ block.id }}"
+    data-po-root
+    data-po-currency="{{ shop.currency }}"
+    data-po-variant-ids="{{ product.variants | map: 'id' | json | escape }}"
+    data-po-variant-prices="{{ product.variants | map: 'price' | json | escape }}"
+    data-po-pick-one="{{ 'product_options.pick_one' | t | escape }}"
+    data-po-each-label="{{ 'product_options.each' | t | escape }}"
+    data-po-per-label="{{ 'product_options.per' | t | escape }}"
+  >
+    {%- for f in fields -%}
+      {%- assign fid = 'po-' | append: block.id | append: '-' | append: forloop.index -%}
+      {%- capture label -%}
+        {{ f.label | escape }}{% if f.price %}<span class="po__price" data-po-amount="{{ f.price }}"></span>{% endif %}{% if f.required %}<span class="po__req" aria-hidden="true">*</span>{% endif %}
+      {%- endcapture -%}
+      {%- capture help -%}
+        {%- if f.helpText != blank %}<p class="po__help" id="{{ fid }}-help">{{ f.helpText | escape }}</p>{% endif -%}
+      {%- endcapture -%}
+      {%- capture describedby -%}
+        {%- if f.helpText != blank %}aria-describedby="{{ fid }}-help"{% endif -%}
+      {%- endcapture -%}
+      {%- capture attrs -%}
+        {{ describedby }}{% if f.required %} required{% endif %}
+        {%- if f.placeholder != blank %} placeholder="{{ f.placeholder | escape }}"{% endif %}
+        {%- if f.maxLength %} maxlength="{{ f.maxLength }}"{% endif %}
+      {%- endcapture -%}
+
+      <div
+        class="po__field"
+        data-po-field
+        data-po-id="{{ f.id }}"
+        data-po-label="{{ f.label | escape }}"
+        {% if f.price %}data-po-price="{{ f.price }}"{% endif %}
+        {% if f.type == 'number' %}data-po-per="{{ f.id }}"{% elsif f.per %}data-po-per="{{ f.per }}"{% endif %}
+        {% if f.unit != blank %}data-po-unit="{{ f.unit | escape }}"{% endif %}
+        {% if f.condition %}data-po-when="{{ f.condition.fieldId }}" data-po-values="{{ f.condition.values | json | escape }}" hidden{% endif %}
+      >
+        {%- case f.type -%}
+          {%- when 'radio', 'swatch', 'checkboxes' -%}
+            <fieldset class="po__group" {{ describedby }}>
+              <legend class="po__label">
+                {{- label -}}
+                {%- if f.type == 'swatch' %}<span class="po__picked" data-po-picked></span>{% endif -%}
+              </legend>
+              {{ help }}
+              <div class="po__choices po__choices--{{ f.type }}">
+                {%- for c in f.choices -%}
+                  {%- assign cid = fid | append: '-' | append: forloop.index -%}
+                  {%- if f.type == 'checkboxes' -%}
+                    <label class="po__check">
+                      <input type="checkbox" value="{{ c.label | escape }}" {% if c.price %}data-po-price="{{ c.price }}"{% endif %} data-po-multi {% if f.required and forloop.first %}data-po-required{% endif %}>
+                      <span>{{ c.label | escape }}{% if c.price %}<span class="po__price" data-po-amount="{{ c.price }}"></span>{% endif %}</span>
+                    </label>
+                  {%- else -%}
+                    <input class="po__sr" type="radio" id="{{ cid }}" name="{{ fid }}" value="{{ c.label | escape }}" {% if c.price %}data-po-price="{{ c.price }}"{% endif %} {% if f.required %}required{% endif %}>
+                    {%- if f.type == 'swatch' -%}
+                      <label class="po__swatch" for="{{ cid }}" title="{{ c.label | escape }}" style="--po-swatch: {{ c.color | escape }}">
+                        <span class="po__sr">{{ c.label | escape }}</span>
+                      </label>
+                    {%- else -%}
+                      <label class="po__pill" for="{{ cid }}">
+                        {{- c.label | escape -}}
+                        {%- if c.price %}<span class="po__price" data-po-amount="{{ c.price }}"></span>{% endif -%}
+                      </label>
+                    {%- endif -%}
+                  {%- endif -%}
+                {%- endfor -%}
+              </div>
+            </fieldset>
+
+          {%- when 'checkbox' -%}
+            <label class="po__check">
+              <input type="checkbox" value="Yes" {{ attrs }}>
+              <span>{{ label }}</span>
+            </label>
+            {{ help }}
+
+          {%- else -%}
+            <label class="po__label" for="{{ fid }}">{{ label }}</label>
+            {{ help }}
+            {%- case f.type -%}
+              {%- when 'textarea' -%}
+                <textarea class="po__input" id="{{ fid }}" rows="3" {{ attrs }}></textarea>
+              {%- when 'select' -%}
+                <select class="po__input" id="{{ fid }}" {{ attrs }}>
+                  <option value="">{{ 'product_options.choose' | t }}</option>
+                  {%- for c in f.choices -%}
+                    <option value="{{ c.label | escape }}" {% if c.price %}data-po-price="{{ c.price }}"{% endif %}>{{ c.label | escape }}</option>
+                  {%- endfor -%}
+                </select>
+              {%- when 'number' -%}
+                {%- capture number_input -%}
+                  <input
+                    class="po__input"
+                    type="number"
+                    id="{{ fid }}"
+                    step="{% if f.integer %}1{% else %}any{% endif %}"
+                    inputmode="{% if f.integer %}numeric{% else %}decimal{% endif %}"
+                    {% if f.min != nil %}min="{{ f.min }}"{% endif %}
+                    {% if f.max != nil %}max="{{ f.max }}"{% endif %}
+                    {{ attrs }}
+                  >
+                {%- endcapture -%}
+                {%- if f.integer -%}
+                  <div class="po__stepper">
+                    <button type="button" class="po__step" data-po-step="-1" aria-label="{{ 'product_options.decrease' | t }}">−</button>
+                    {{- number_input -}}
+                    <button type="button" class="po__step" data-po-step="1" aria-label="{{ 'product_options.increase' | t }}">+</button>
+                  </div>
+                {%- else -%}
+                  {{ number_input }}
+                {%- endif -%}
+              {%- when 'date' -%}
+                <input class="po__input" type="date" id="{{ fid }}" {{ attrs }}>
+              {%- else -%}
+                <input class="po__input" type="text" id="{{ fid }}" {{ attrs }}>
+            {%- endcase -%}
+            {%- if f.maxLength -%}
+              <p class="po__count" data-po-count aria-live="polite">0/{{ f.maxLength }}</p>
+            {%- endif -%}
+        {%- endcase -%}
+      </div>
+    {%- endfor -%}
+
+    <div class="po__summary" data-po-summary aria-live="polite" hidden>
+      <p class="po__summary-title">{{ 'product_options.summary' | t }}</p>
+      <div data-po-summary-lines></div>
+      <p class="po__summary-row po__summary-total">
+        <span>{{ 'product_options.options_total' | t }}</span><span data-po-options-total></span>
+      </p>
+      <p class="po__summary-row po__summary-grand" data-po-grand hidden>
+        <span>{{ 'product_options.grand_total' | t }}</span><span data-po-grand-total></span>
+      </p>
+    </div>
+  </div>
+{%- elsif request.design_mode -%}
+  <div class="po po--empty">{{ 'product_options.empty' | t }}</div>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Product options",
+  "target": "section",
+  "enabled_on": { "templates": ["product"] },
+  "stylesheet": "product-options.css",
+  "javascript": "product-options.js",
+  "settings": []
+}
+{% endschema %}

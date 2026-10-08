@@ -1,0 +1,44 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "79e42b949688b5a9cd19059d7faf716c"
+name = "Countless Options"
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_products,read_themes,write_cart_transforms,write_publications"
+
+# Merged fields of every active option set on the product, written by app/options.server.js
+# and rendered by the theme block. Prisma holds the source of truth.
+[product.metafields.app.options]
+type = "json"
+name = "Product options"
+access.storefront = "public_read"
+
+[webhooks]
+api_version = "2027-01"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/products/delete"
+  topics = [ "products/delete" ]
+
+  # Mandatory for public apps.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/compliance"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true

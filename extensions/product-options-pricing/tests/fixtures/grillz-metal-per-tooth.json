@@ -1,0 +1,510 @@
+{
+  "payload": {
+    "export": "cart-transform-run",
+    "target": "cart.transform.run",
+    "input": {
+      "presentmentCurrencyRate": "1.0",
+      "cartTransform": {
+        "addonVariant": {
+          "value": "gid://shopify/ProductVariant/999"
+        }
+      },
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "selection": {
+              "value": "{\"m\":[\"Gold\"],\"t\":\"3\",\"d\":[\"Yes\"],\"e\":\"AB\"}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "m",
+                      "type": "radio",
+                      "label": "Metal",
+                      "required": true,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "Silver",
+                          "price": 20
+                        },
+                        {
+                          "label": "Gold",
+                          "price": 50
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of teeth",
+                      "required": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "unit": "tooth"
+                    },
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamonds",
+                      "required": false,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes",
+                          "price": 30
+                        }
+                      ]
+                    },
+                    {
+                      "id": "e",
+                      "type": "text",
+                      "label": "Engraving",
+                      "required": false,
+                      "price": 10
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "selection": {
+              "value": "{\"m\":[\"Silver\"],\"t\":\"2\",\"d\":[\"No\"]}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "m",
+                      "type": "radio",
+                      "label": "Metal",
+                      "required": true,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "Silver",
+                          "price": 20
+                        },
+                        {
+                          "label": "Gold",
+                          "price": 50
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of teeth",
+                      "required": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "unit": "tooth"
+                    },
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamonds",
+                      "required": false,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes",
+                          "price": 30
+                        }
+                      ]
+                    },
+                    {
+                      "id": "e",
+                      "type": "text",
+                      "label": "Engraving",
+                      "required": false,
+                      "price": 10
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/3",
+            "selection": {
+              "value": "{\"m\":[\"Gold\"]}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "m",
+                      "type": "radio",
+                      "label": "Metal",
+                      "required": true,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "Silver",
+                          "price": 20
+                        },
+                        {
+                          "label": "Gold",
+                          "price": 50
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of teeth",
+                      "required": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "unit": "tooth"
+                    },
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamonds",
+                      "required": false,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes",
+                          "price": 30
+                        }
+                      ]
+                    },
+                    {
+                      "id": "e",
+                      "type": "text",
+                      "label": "Engraving",
+                      "required": false,
+                      "price": 10
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/4",
+            "selection": {
+              "value": "{\"m\":[\"Gold\"],\"t\":\"40\"}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "m",
+                      "type": "radio",
+                      "label": "Metal",
+                      "required": true,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "Silver",
+                          "price": 20
+                        },
+                        {
+                          "label": "Gold",
+                          "price": 50
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of teeth",
+                      "required": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "unit": "tooth"
+                    },
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamonds",
+                      "required": false,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes",
+                          "price": 30
+                        }
+                      ]
+                    },
+                    {
+                      "id": "e",
+                      "type": "text",
+                      "label": "Engraving",
+                      "required": false,
+                      "price": 10
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/1",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold"
+                  },
+                  {
+                    "key": "Number of teeth",
+                    "value": "3"
+                  },
+                  {
+                    "key": "Diamonds",
+                    "value": "Yes"
+                  },
+                  {
+                    "key": "Engraving",
+                    "value": "AB"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "250.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold, 3 × 50.00 (+150.00 USD)"
+                  },
+                  {
+                    "key": "Diamonds",
+                    "value": "Yes, 3 × 30.00 (+90.00 USD)"
+                  },
+                  {
+                    "key": "Engraving",
+                    "value": "AB (+10.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/2",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Silver"
+                  },
+                  {
+                    "key": "Number of teeth",
+                    "value": "2"
+                  },
+                  {
+                    "key": "Diamonds",
+                    "value": "No"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "40.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Silver, 2 × 20.00 (+40.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/3",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "50.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold, 1 × 50.00 (+50.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/4",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold"
+                  },
+                  {
+                    "key": "Number of teeth",
+                    "value": "32"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "1600.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold, 32 × 50.00 (+1600.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

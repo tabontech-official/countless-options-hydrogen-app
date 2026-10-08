@@ -1,0 +1,526 @@
+{
+  "payload": {
+    "export": "cart-transform-run",
+    "target": "cart.transform.run",
+    "input": {
+      "presentmentCurrencyRate": "1.0",
+      "cartTransform": {
+        "addonVariant": {
+          "value": "gid://shopify/ProductVariant/999"
+        }
+      },
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "selection": {
+              "value": "{\"d\":[\"Yes\"],\"t\":\"4\"}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamond teeth",
+                      "required": true,
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of diamond teeth",
+                      "required": true,
+                      "price": 50,
+                      "perUnit": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "condition": {
+                        "fieldId": "d",
+                        "values": [
+                          "Yes"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "selection": {
+              "value": "{\"d\":[\"Yes\"],\"t\":\"-3\"}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamond teeth",
+                      "required": true,
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of diamond teeth",
+                      "required": true,
+                      "price": 50,
+                      "perUnit": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "condition": {
+                        "fieldId": "d",
+                        "values": [
+                          "Yes"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/3",
+            "selection": {
+              "value": "{\"d\":[\"Yes\"],\"t\":\"1e9\"}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamond teeth",
+                      "required": true,
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of diamond teeth",
+                      "required": true,
+                      "price": 50,
+                      "perUnit": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "condition": {
+                        "fieldId": "d",
+                        "values": [
+                          "Yes"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/4",
+            "selection": {
+              "value": "{\"d\":[\"No\"],\"t\":\"5\"}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamond teeth",
+                      "required": true,
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of diamond teeth",
+                      "required": true,
+                      "price": 50,
+                      "perUnit": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "condition": {
+                        "fieldId": "d",
+                        "values": [
+                          "Yes"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/5",
+            "selection": {
+              "value": "{\"d\":[\"Yes\"],\"t\":\"2.6\"}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamond teeth",
+                      "required": true,
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of diamond teeth",
+                      "required": true,
+                      "price": 50,
+                      "perUnit": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "condition": {
+                        "fieldId": "d",
+                        "values": [
+                          "Yes"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/6",
+            "selection": {
+              "value": "{\"d\":[\"Yes\"],\"t\":\"abc\"}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamond teeth",
+                      "required": true,
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of diamond teeth",
+                      "required": true,
+                      "price": 50,
+                      "perUnit": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "condition": {
+                        "fieldId": "d",
+                        "values": [
+                          "Yes"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/1",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Diamond teeth",
+                    "value": "Yes"
+                  },
+                  {
+                    "key": "Number of diamond teeth",
+                    "value": "4"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "200.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Number of diamond teeth",
+                    "value": "4 × 50.00 (+200.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/2",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Diamond teeth",
+                    "value": "Yes"
+                  },
+                  {
+                    "key": "Number of diamond teeth",
+                    "value": "1"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "50.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Number of diamond teeth",
+                    "value": "1 × 50.00 (+50.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/3",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Diamond teeth",
+                    "value": "Yes"
+                  },
+                  {
+                    "key": "Number of diamond teeth",
+                    "value": "32"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "1600.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Number of diamond teeth",
+                    "value": "32 × 50.00 (+1600.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/5",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Diamond teeth",
+                    "value": "Yes"
+                  },
+                  {
+                    "key": "Number of diamond teeth",
+                    "value": "3"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "150.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Number of diamond teeth",
+                    "value": "3 × 50.00 (+150.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

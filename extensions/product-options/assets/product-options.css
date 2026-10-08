@@ -1,0 +1,332 @@
+/* Inherits the theme's font and colors; every tint is derived from currentColor
+   so the block fits light and dark themes without settings. */
+.po {
+  --po-border: color-mix(in srgb, currentColor 22%, transparent);
+  --po-border-hover: color-mix(in srgb, currentColor 45%, transparent);
+  --po-muted: color-mix(in srgb, currentColor 68%, transparent);
+  --po-tint: color-mix(in srgb, currentColor 7%, transparent);
+  --po-radius: var(--inputs-radius, 6px);
+  --po-error: #c62a2f;
+  display: grid;
+  gap: 1.25em;
+  margin: 1.5em 0;
+}
+
+/* Follow-up fields and the summary toggle `hidden`; keep it winning over display rules below. */
+.po [hidden] {
+  display: none !important;
+}
+
+.po__price {
+  margin-left: 0.35em;
+  font-weight: 400;
+  color: var(--po-muted);
+  white-space: nowrap;
+}
+
+.po__summary {
+  display: grid;
+  gap: 0.45em;
+  padding: 0.9em 1em;
+  font-size: 0.92em;
+  background: var(--po-tint);
+  border: 1px solid var(--po-border);
+  border-radius: var(--po-radius);
+}
+
+.po__summary-title {
+  margin: 0 0 0.15em;
+  font-weight: 600;
+}
+
+.po__summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+  margin: 0;
+}
+
+.po__summary-row > span:last-child {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.po__summary-total {
+  padding-top: 0.55em;
+  border-top: 1px solid var(--po-border);
+  font-weight: 600;
+}
+
+.po__summary-grand {
+  font-size: 1.05em;
+  font-weight: 700;
+}
+
+.po--empty {
+  padding: 1em 1.25em;
+  border: 1px dashed var(--po-border);
+  border-radius: var(--po-radius);
+  color: var(--po-muted);
+  font-size: 0.9em;
+}
+
+.po__field,
+.po__group {
+  display: grid;
+  gap: 0.5em;
+  min-width: 0;
+}
+
+.po__group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.po__label {
+  padding: 0;
+  font-weight: 600;
+  font-size: 0.95em;
+  line-height: 1.3;
+}
+
+.po__req {
+  margin-left: 0.2em;
+  color: var(--po-error);
+}
+
+.po__picked {
+  font-weight: 400;
+  color: var(--po-muted);
+}
+
+.po__help,
+.po__count {
+  margin: 0;
+  font-size: 0.85em;
+  line-height: 1.4;
+  color: var(--po-muted);
+}
+
+.po__count {
+  text-align: right;
+}
+
+/* Text, number, date, select, textarea */
+.po__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.9em;
+  padding: 0.7em 0.9em;
+  font: inherit;
+  font-size: max(16px, 1em); /* stops iOS zooming into the field */
+  color: inherit;
+  background-color: transparent;
+  border: 1px solid var(--po-border);
+  border-radius: var(--po-radius);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.po__input:hover {
+  border-color: var(--po-border-hover);
+}
+
+.po__input:focus-visible {
+  outline: none;
+  border-color: currentColor;
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+.po__input::placeholder {
+  color: var(--po-muted);
+  opacity: 0.8;
+}
+
+/* − [ 4 ] + counter for whole-number fields */
+.po__stepper {
+  display: inline-flex;
+  width: max-content;
+  border: 1px solid var(--po-border);
+  border-radius: var(--po-radius);
+  overflow: hidden;
+}
+
+.po__stepper .po__input {
+  width: 4.5em;
+  text-align: center;
+  border: 0;
+  border-radius: 0;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.po__stepper .po__input::-webkit-inner-spin-button,
+.po__stepper .po__input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.po__step {
+  min-width: 2.9em;
+  font: inherit;
+  font-size: 1.15em;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.po__step:hover {
+  background: var(--po-tint);
+}
+
+.po__step:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.po__stepper:has(.po__input:focus-visible) {
+  border-color: currentColor;
+}
+
+.po__stepper:has(.po__input:user-invalid),
+.po--checked .po__stepper:has(.po__input:invalid) {
+  border-color: var(--po-error);
+}
+
+textarea.po__input {
+  min-height: 6em;
+  resize: vertical;
+}
+
+select.po__input {
+  appearance: none;
+  padding-right: 2.6em;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 1.25em) 55%, calc(100% - 0.95em) 55%;
+  background-size: 0.32em 0.32em;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+select.po__input option {
+  color: #121212;
+  background: #fff;
+}
+
+/* Button-style choices */
+.po__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+}
+
+.po__pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.6em;
+  padding: 0.5em 1.15em;
+  line-height: 1.2;
+  border: 1px solid var(--po-border);
+  border-radius: var(--variant-pills-radius, 999px);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.po__pill:hover {
+  border-color: var(--po-border-hover);
+}
+
+.po__sr:checked + .po__pill {
+  border-color: currentColor;
+  background-color: var(--po-tint);
+  box-shadow: inset 0 0 0 1px currentColor;
+  font-weight: 600;
+}
+
+/* Color swatches */
+.po__choices--swatch {
+  gap: 0.75em;
+  padding: 0.2em;
+}
+
+.po__swatch {
+  width: 2.4em;
+  height: 2.4em;
+  border-radius: 50%;
+  background: var(--po-swatch);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.po__swatch:hover {
+  transform: scale(1.06);
+}
+
+.po__sr:checked + .po__swatch {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.po__sr:focus-visible + .po__pill,
+.po__sr:focus-visible + .po__swatch {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+/* Checkboxes */
+.po__choices--checkboxes {
+  display: grid;
+  gap: 0.6em;
+}
+
+.po__check {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.6em;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.po__check input {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  margin: 0.15em 0 0;
+  accent-color: currentColor;
+  cursor: pointer;
+}
+
+/* Errors show only after the customer has interacted, or tried to add to cart (.po--checked). */
+.po__input:user-invalid,
+.po--checked .po__input:invalid {
+  border-color: var(--po-error);
+}
+
+.po__field:has(:user-invalid) .po__label,
+.po__field:has(:user-invalid) .po__check,
+.po--checked .po__field:has(:invalid) .po__label,
+.po--checked .po__field:has(:invalid) .po__check {
+  color: var(--po-error);
+}
+
+.po__sr {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .po * {
+    transition: none !important;
+  }
+}

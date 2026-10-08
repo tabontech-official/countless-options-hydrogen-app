@@ -1,0 +1,546 @@
+{
+  "payload": {
+    "export": "cart-transform-run",
+    "target": "cart.transform.run",
+    "input": {
+      "presentmentCurrencyRate": "1.0",
+      "cartTransform": {
+        "addonVariant": {
+          "value": "gid://shopify/ProductVariant/999"
+        }
+      },
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "selection": {
+              "value": "{\"m\":[\"Gold\"],\"t\":\"3\",\"d\":[\"Yes\"],\"k\":[\"VVS\"],\"s\":[\"Bezel\"],\"g\":\"Yes\"}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "m",
+                      "type": "radio",
+                      "label": "Metal",
+                      "required": true,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "Silver",
+                          "price": 20
+                        },
+                        {
+                          "label": "Gold",
+                          "price": 50
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of teeth",
+                      "required": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "unit": "tooth"
+                    },
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamonds",
+                      "required": false,
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "k",
+                      "type": "radio",
+                      "label": "Diamond type",
+                      "required": true,
+                      "per": "t",
+                      "condition": {
+                        "fieldId": "d",
+                        "values": [
+                          "Yes"
+                        ]
+                      },
+                      "choices": [
+                        {
+                          "label": "Regular",
+                          "price": 10
+                        },
+                        {
+                          "label": "VVS",
+                          "price": 30
+                        }
+                      ]
+                    },
+                    {
+                      "id": "s",
+                      "type": "radio",
+                      "label": "Setting",
+                      "required": false,
+                      "condition": {
+                        "fieldId": "k",
+                        "values": [
+                          "VVS"
+                        ]
+                      },
+                      "choices": [
+                        {
+                          "label": "Prong"
+                        },
+                        {
+                          "label": "Bezel",
+                          "price": 5
+                        }
+                      ]
+                    },
+                    {
+                      "id": "g",
+                      "type": "checkbox",
+                      "label": "Gift box",
+                      "required": false,
+                      "price": 5
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "selection": {
+              "value": "{\"m\":[\"Silver\"],\"t\":\"2\",\"d\":[\"No\"],\"k\":[\"VVS\"],\"s\":[\"Bezel\"]}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "m",
+                      "type": "radio",
+                      "label": "Metal",
+                      "required": true,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "Silver",
+                          "price": 20
+                        },
+                        {
+                          "label": "Gold",
+                          "price": 50
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of teeth",
+                      "required": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "unit": "tooth"
+                    },
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamonds",
+                      "required": false,
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "k",
+                      "type": "radio",
+                      "label": "Diamond type",
+                      "required": true,
+                      "per": "t",
+                      "condition": {
+                        "fieldId": "d",
+                        "values": [
+                          "Yes"
+                        ]
+                      },
+                      "choices": [
+                        {
+                          "label": "Regular",
+                          "price": 10
+                        },
+                        {
+                          "label": "VVS",
+                          "price": 30
+                        }
+                      ]
+                    },
+                    {
+                      "id": "s",
+                      "type": "radio",
+                      "label": "Setting",
+                      "required": false,
+                      "condition": {
+                        "fieldId": "k",
+                        "values": [
+                          "VVS"
+                        ]
+                      },
+                      "choices": [
+                        {
+                          "label": "Prong"
+                        },
+                        {
+                          "label": "Bezel",
+                          "price": 5
+                        }
+                      ]
+                    },
+                    {
+                      "id": "g",
+                      "type": "checkbox",
+                      "label": "Gift box",
+                      "required": false,
+                      "price": 5
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/3",
+            "selection": {
+              "value": "{\"m\":[\"Gold\"],\"t\":\"1\",\"d\":[\"Yes\"],\"k\":[\"Regular\"],\"s\":[\"Bezel\"]}"
+            },
+            "sellingPlanAllocation": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "100.0",
+                "currencyCode": "USD"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "options": {
+                  "jsonValue": [
+                    {
+                      "id": "m",
+                      "type": "radio",
+                      "label": "Metal",
+                      "required": true,
+                      "per": "t",
+                      "choices": [
+                        {
+                          "label": "Silver",
+                          "price": 20
+                        },
+                        {
+                          "label": "Gold",
+                          "price": 50
+                        }
+                      ]
+                    },
+                    {
+                      "id": "t",
+                      "type": "number",
+                      "label": "Number of teeth",
+                      "required": true,
+                      "integer": true,
+                      "min": 1,
+                      "max": 32,
+                      "unit": "tooth"
+                    },
+                    {
+                      "id": "d",
+                      "type": "radio",
+                      "label": "Diamonds",
+                      "required": false,
+                      "choices": [
+                        {
+                          "label": "No"
+                        },
+                        {
+                          "label": "Yes"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "k",
+                      "type": "radio",
+                      "label": "Diamond type",
+                      "required": true,
+                      "per": "t",
+                      "condition": {
+                        "fieldId": "d",
+                        "values": [
+                          "Yes"
+                        ]
+                      },
+                      "choices": [
+                        {
+                          "label": "Regular",
+                          "price": 10
+                        },
+                        {
+                          "label": "VVS",
+                          "price": 30
+                        }
+                      ]
+                    },
+                    {
+                      "id": "s",
+                      "type": "radio",
+                      "label": "Setting",
+                      "required": false,
+                      "condition": {
+                        "fieldId": "k",
+                        "values": [
+                          "VVS"
+                        ]
+                      },
+                      "choices": [
+                        {
+                          "label": "Prong"
+                        },
+                        {
+                          "label": "Bezel",
+                          "price": 5
+                        }
+                      ]
+                    },
+                    {
+                      "id": "g",
+                      "type": "checkbox",
+                      "label": "Gift box",
+                      "required": false,
+                      "price": 5
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/1",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold"
+                  },
+                  {
+                    "key": "Number of teeth",
+                    "value": "3"
+                  },
+                  {
+                    "key": "Diamonds",
+                    "value": "Yes"
+                  },
+                  {
+                    "key": "Diamond type",
+                    "value": "VVS"
+                  },
+                  {
+                    "key": "Setting",
+                    "value": "Bezel"
+                  },
+                  {
+                    "key": "Gift box",
+                    "value": "Yes"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "250.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold, 3 × 50.00 (+150.00 USD)"
+                  },
+                  {
+                    "key": "Diamond type",
+                    "value": "VVS, 3 × 30.00 (+90.00 USD)"
+                  },
+                  {
+                    "key": "Setting",
+                    "value": "Bezel (+5.00 USD)"
+                  },
+                  {
+                    "key": "Gift box",
+                    "value": "Yes (+5.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/2",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Silver"
+                  },
+                  {
+                    "key": "Number of teeth",
+                    "value": "2"
+                  },
+                  {
+                    "key": "Diamonds",
+                    "value": "No"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "40.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Silver, 2 × 20.00 (+40.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/3",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/1",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "100.0"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold"
+                  },
+                  {
+                    "key": "Number of teeth",
+                    "value": "1"
+                  },
+                  {
+                    "key": "Diamonds",
+                    "value": "Yes"
+                  },
+                  {
+                    "key": "Diamond type",
+                    "value": "Regular"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "60.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Metal",
+                    "value": "Gold, 1 × 50.00 (+50.00 USD)"
+                  },
+                  {
+                    "key": "Diamond type",
+                    "value": "Regular, 1 × 10.00 (+10.00 USD)"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

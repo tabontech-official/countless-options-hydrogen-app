@@ -1,0 +1,21 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "t:name"
+handle = "product-options-pricing"
+type = "function"
+uid = "ff840afc-a064-3eea-5765-dba8cd545d56442643a7"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.transform.run"
+  input_query = "src/cart_transform_run.graphql"
+  export = "cart-transform-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"
+
+  [extensions.ui.paths]
+  create = "/"
+  details = "/"
