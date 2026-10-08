@@ -2,7 +2,7 @@
 
 client_id = "79e42b949688b5a9cd19059d7faf716c"
 name = "Countless Options"
-application_url = "https://example.com"
+application_url = "https://countless-options-hydrogen-app.vercel.app"
 embedded = true
 
 [access_scopes]
@@ -37,7 +37,7 @@ api_version = "2027-01"
   compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://countless-options-hydrogen-app.vercel.app/api/auth" ]
 
 [build]
 include_config_on_deploy = true
