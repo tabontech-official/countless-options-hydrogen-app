@@ -1,3 +1,3 @@
 {
-  "buildCommand": "prisma generate && prisma migrate deploy && react-router build"
+  "buildCommand": "npx prisma generate && npx prisma migrate deploy && npx react-router build"
 }
