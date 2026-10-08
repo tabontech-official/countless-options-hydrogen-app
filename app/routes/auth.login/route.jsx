@@ -1,8 +1,13 @@
-import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { useState } from "react";
-import { Form, useActionData, useLoaderData } from "react-router";
+import { Link, useActionData, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
+import { Brand } from "../../components/Brand";
+import { InstallForm } from "../../components/InstallForm";
+import appStyles from "../../styles/app.css?url";
 import { loginErrorMessage } from "./error.server";
+
+export const links = () => [{ rel: "stylesheet", href: appStyles }];
+
+export const meta = () => [{ title: "Log in | Countless Options" }];
 
 export const loader = async ({ request }) => {
   const errors = loginErrorMessage(await login(request));
@@ -21,27 +26,20 @@ export const action = async ({ request }) => {
 export default function Auth() {
   const loaderData = useLoaderData();
   const actionData = useActionData();
-  const [shop, setShop] = useState("");
   const { errors } = actionData || loaderData;
 
   return (
-    <AppProvider embedded={false}>
-      <s-page>
-        <Form method="post">
-          <s-section heading="Log in">
-            <s-text-field
-              name="shop"
-              label="Shop domain"
-              details="example.myshopify.com"
-              value={shop}
-              onChange={(e) => setShop(e.currentTarget.value)}
-              autocomplete="on"
-              error={errors.shop}
-            ></s-text-field>
-            <s-button type="submit">Log in</s-button>
-          </s-section>
-        </Form>
-      </s-page>
-    </AppProvider>
+    <main className="co-login">
+      <div className="co-glass co-login__card co-animate">
+        <Link to="/" aria-label="Countless Options home">
+          <Brand />
+        </Link>
+        <h1 className="co-heading co-heading--small">
+          Log in to <em>your store</em>
+        </h1>
+        <p>Enter your store name and we’ll open Countless Options in your Shopify admin.</p>
+        <InstallForm error={errors.shop} label="Log in" />
+      </div>
+    </main>
   );
 }

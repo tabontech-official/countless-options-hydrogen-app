@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -8,7 +7,8 @@ import { FIELD_TYPES, hasPrices } from "../options";
 import { countProducts, isBlockInTheme, themeEditorUrl } from "../options.server";
 import { TEMPLATES } from "../templates";
 import { plural } from "../components/OptionSetsTable";
-import { RingImage } from "../components/Art";
+import { Brand } from "../components/Brand";
+import { TryIt } from "../components/TryIt";
 import { Ring } from "../components/Ring";
 import { Capabilities } from "../components/Capabilities";
 import { TemplateGallery } from "../components/TemplateGallery";
@@ -134,6 +134,7 @@ export default function Dashboard() {
 
 // A personal welcome whose second line follows setup: first set, going live, then live.
 function Hero({ data, hasSets, live, steps }) {
+  const shopify = useAppBridge();
   const done = steps.filter((s) => s.done).length;
   const next = live
     ? `Your options are live on ${plural(data.productCount, "product")}.`
@@ -144,15 +145,7 @@ function Hero({ data, hasSets, live, steps }) {
     <section className="co-hero">
       <div>
         {/* Built like the try-it card header beside it, so the two sit on one line. */}
-        <span className="co-brand">
-          <span className="co-brand__mark" aria-hidden="true">
-            ∞
-          </span>
-          <span>
-            <strong>Countless</strong>
-            <small>Product Options</small>
-          </span>
-        </span>
+        <Brand />
         <span className={live ? "co-state co-state--live" : "co-state"}>
           {live ? "Live on your store" : `Not live yet · ${done} of ${steps.length} setup steps done`}
         </span>
@@ -173,111 +166,8 @@ function Hero({ data, hasSets, live, steps }) {
           </Link>
         </div>
       </div>
-      <TryIt />
+      <TryIt onAddToCart={() => shopify.toast.show("This is a preview. Your product pages work just like this.")} />
     </section>
-  );
-}
-
-// ---------- Try-it product card: a working storefront preview ----------
-
-const METALS = [
-  { name: "Yellow gold", color: "#c9a227" },
-  { name: "White gold", color: "#c9ccd1" },
-  { name: "Rose gold", color: "#d9a395" },
-];
-const SIZES = ["5", "6", "7", "8", "9"];
-const BASE = 129;
-const ENGRAVING = 10;
-const GIFT_BOX = 5;
-const usd = (n) => `$${n.toFixed(2)}`;
-
-function TryIt() {
-  const shopify = useAppBridge();
-  const [metal, setMetal] = useState(METALS[0]);
-  const [size, setSize] = useState("7");
-  const [engrave, setEngrave] = useState(true);
-  const [text, setText] = useState("Forever, Emma");
-  const [gift, setGift] = useState(false);
-  const total = BASE + (engrave ? ENGRAVING : 0) + (gift ? GIFT_BOX : 0);
-
-  return (
-    <div className="co-glass co-pdp" role="group" aria-label="Sample product page you can try">
-      <div className="co-pdp__head">
-        <span className="co-pdp__thumb">
-          <RingImage />
-        </span>
-        <span>
-          <strong>Eternity Ring</strong>
-          <small>Sample product · live preview</small>
-        </span>
-      </div>
-
-      <div className="co-pdp__label">
-        <span>Metal</span>
-        <span>{metal.name}</span>
-      </div>
-      <div className="co-metals">
-        {METALS.map((m) => (
-          <button
-            key={m.name}
-            type="button"
-            aria-label={m.name}
-            aria-pressed={metal === m}
-            style={{ background: m.color }}
-            onClick={() => setMetal(m)}
-          />
-        ))}
-      </div>
-
-      <div className="co-pdp__label">
-        <span>Size</span>
-      </div>
-      <div className="co-sizes">
-        {SIZES.map((s) => (
-          <button key={s} type="button" aria-pressed={size === s} onClick={() => setSize(s)}>
-            {s}
-          </button>
-        ))}
-      </div>
-
-      <div className="co-pdp__addons">
-        <label className="co-checkrow">
-          <input type="checkbox" checked={engrave} onChange={(e) => setEngrave(e.target.checked)} />
-          Engraving
-          <span className="co-mono co-up">+${ENGRAVING}</span>
-        </label>
-        {/* The follow-up: only shown while engraving is ticked. */}
-        <div className="co-reveal" data-open={engrave}>
-          <div>
-            <span className="co-textfield">
-              <input
-                value={text}
-                maxLength={20}
-                aria-label="Engraving text"
-                disabled={!engrave}
-                onChange={(e) => setText(e.target.value)}
-              />
-              <small className="co-mono">{`${text.length}/20`}</small>
-            </span>
-          </div>
-        </div>
-        <label className="co-checkrow">
-          <input type="checkbox" checked={gift} onChange={(e) => setGift(e.target.checked)} />
-          Gift box
-          <span className="co-mono co-up">+${GIFT_BOX}</span>
-        </label>
-      </div>
-
-      <button
-        type="button"
-        className="co-addcart"
-        aria-label={`Add to cart, ${usd(total)}, ${metal.name}, size ${size}`}
-        onClick={() => shopify.toast.show("This is a preview. Your product pages work just like this.")}
-      >
-        <span>Add to cart</span>
-        <span className="co-mono">{usd(total)}</span>
-      </button>
-    </div>
   );
 }
 
