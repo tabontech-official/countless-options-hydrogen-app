@@ -3,7 +3,7 @@ import { hasPrices, mergeFields } from "./options";
 
 export const BLOCK_HANDLE = "product_options";
 
-async function gql(admin, query, variables) {
+export async function gql(admin, query, variables) {
   const res = await admin.graphql(query, { variables });
   return (await res.json()).data;
 }

@@ -7,7 +7,15 @@ embedded = true
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,read_themes,write_cart_transforms,write_publications"
+# write_files + write_app_proxy: customers' "File upload" answers go to the shop's Files (app/routes/proxy.upload.jsx).
+scopes = "write_products,read_themes,write_cart_transforms,write_publications,write_files,write_app_proxy"
+
+# Storefront path /apps/countless-options/* reaches this app's /proxy/* routes.
+# Merchants can rename it per store in Settings > Apps; product-options-upload.js assumes this default.
+[app_proxy]
+url = "/proxy"
+prefix = "apps"
+subpath = "countless-options"
 
 # Merged fields of every active option set on the product, written by app/options.server.js
 # and rendered by the theme block. Prisma holds the source of truth.

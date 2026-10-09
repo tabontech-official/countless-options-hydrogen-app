@@ -17,6 +17,11 @@
     data-po-pick-one="{{ 'product_options.pick_one' | t | escape }}"
     data-po-each-label="{{ 'product_options.each' | t | escape }}"
     data-po-per-label="{{ 'product_options.per' | t | escape }}"
+    data-po-uploading="{{ 'product_options.uploading' | t | escape }}"
+    data-po-uploaded="{{ 'product_options.uploaded' | t | escape }}"
+    data-po-upload-type="{{ 'product_options.upload_type' | t | escape }}"
+    data-po-upload-size="{{ 'product_options.upload_size' | t | escape }}"
+    data-po-upload-failed="{{ 'product_options.upload_failed' | t | escape }}"
   >
     {%- for f in fields -%}
       {%- assign fid = 'po-' | append: block.id | append: '-' | append: forloop.index -%}
@@ -122,6 +127,14 @@
                 {%- endif -%}
               {%- when 'date' -%}
                 <input class="po__input" type="date" id="{{ fid }}" {{ attrs }}>
+              {%- when 'file' -%}
+                {%- comment -%}
+                  product-options-upload.js uploads the chosen file and puts its URL in the hidden
+                  .po__input, which is what goes on the order. `accept` mirrors UPLOAD_TYPES in app/options.js.
+                {%- endcomment -%}
+                <input class="po__file" type="file" id="{{ fid }}" accept=".jpg,.jpeg,.png,.webp,.gif,.heic,.pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.odp" {{ attrs }}>
+                <input class="po__input" type="hidden">
+                <p class="po__upload-status" data-po-upload-status aria-live="polite"></p>
               {%- else -%}
                 <input class="po__input" type="text" id="{{ fid }}" {{ attrs }}>
             {%- endcase -%}
@@ -145,6 +158,10 @@
       </p>
     </div>
   </div>
+  {%- assign uploads = fields | where: 'type', 'file' -%}
+  {%- if uploads.size > 0 -%}
+    <script src="{{ 'product-options-upload.js' | asset_url }}" defer></script>
+  {%- endif -%}
 {%- elsif request.design_mode -%}
   <div class="po po--empty">{{ 'product_options.empty' | t }}</div>
 {%- endif -%}

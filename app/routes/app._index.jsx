@@ -252,7 +252,8 @@ function Kpis({ data }) {
 
 // One fixed color per kind of question, in an order checked for color-blind separation
 // (each neighbour pair, including last to first around the ring). Single and multiple
-// checkboxes share a color: nine field types, eight distinguishable hues.
+// checkboxes share a color; file uploads are a neutral gray, set apart from red and blue
+// by lightness and hue: ten field types, nine colors.
 const TYPE_GROUPS = [
   { key: "text", types: ["text"], color: "#2a78d6" },
   { key: "textarea", types: ["textarea"], color: "#eb6834" },
@@ -262,6 +263,7 @@ const TYPE_GROUPS = [
   { key: "radio", types: ["radio"], color: "#008300" },
   { key: "swatch", types: ["swatch"], color: "#4a3aa7" },
   { key: "checkboxes", types: ["checkboxes", "checkbox"], color: "#e34948", label: "Checkboxes" },
+  { key: "file", types: ["file"], color: "#77738a" },
 ];
 
 function Insights({ data }) {

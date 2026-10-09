@@ -2,7 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { hasPrices, mergeFields, validateOptionSet } from "./options.js";
+import { UPLOAD_ACCEPT, hasPrices, mergeFields, uploadMimeType, validateOptionSet } from "./options.js";
+import { priceSelection } from "../extensions/product-options-pricing/src/pricing.js";
 
 const field = (over) => ({ id: "f1", type: "text", label: "Engraving", ...over });
 
@@ -148,4 +149,26 @@ test("every template is a valid option set", async () => {
     const { errors } = validateOptionSet({ name: t.name, fields: templateFields(t) });
     assert.deepEqual(errors, [], t.id);
   }
+});
+
+test("file uploads: allowed types, saved like text, charged once when uploaded", () => {
+  assert.equal(uploadMimeType("Logo.PNG"), "image/png");
+  assert.equal(uploadMimeType("scan.heic"), "image/heic");
+  assert.equal(uploadMimeType("form.pdf"), "application/pdf");
+  assert.equal(uploadMimeType("Brief.DOCX"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  assert.equal(uploadMimeType("sizes.xlsx"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  for (const name of ["virus.exe", "page.html", "pdf", "no-extension", "x.constructor", undefined]) assert.equal(uploadMimeType(name), null, name);
+  // The theme block's file picker offers exactly what the server accepts.
+  const block = readFileSync(new URL("../extensions/product-options/blocks/product_options.liquid", import.meta.url), "utf8");
+  assert.ok(block.includes(`accept="${UPLOAD_ACCEPT}"`), "product_options.liquid accept= is out of date");
+
+  const { errors, data } = validateOptionSet({ name: "Artwork", fields: [field({ id: "u", type: "file", label: "Your artwork", price: "5" })] });
+  assert.deepEqual(errors, []);
+  assert.equal(data.fields[0].type, "file");
+  assert.equal(data.fields[0].price, 5);
+
+  const url = "https://cdn.shopify.com/s/files/1/0/files/logo.png?v=1";
+  assert.equal(priceSelection(data.fields, { u: url }).total, 5);
+  assert.deepEqual(priceSelection(data.fields, { u: url }).display, [{ label: "Your artwork", value: url }]);
+  assert.equal(priceSelection(data.fields, {}).total, 0);
 });

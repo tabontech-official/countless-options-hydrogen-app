@@ -4,7 +4,7 @@ import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { FIELD_TYPES, MAX_FIELDS, MAX_PRICE, MAX_PRODUCTS, answersOf, hasPrices, newChoice, newField, validateOptionSet } from "../options";
+import { FIELD_TYPES, MAX_FIELDS, MAX_PRICE, MAX_PRODUCTS, UPLOAD_ACCEPT, answersOf, hasPrices, newChoice, newField, validateOptionSet } from "../options";
 import { ensurePricing, getProducts, getShopCurrency, syncProducts } from "../options.server";
 import { StatusBadge, plural } from "../components/OptionSetsTable";
 
@@ -583,6 +583,12 @@ function TypeArt({ type }) {
         </span>
       </span>
     ),
+    file: (
+      <span className="co-art__field">
+        <i className="co-art__up" />
+        {line("48%")}
+      </span>
+    ),
   };
   return (
     <span className="co-art" aria-hidden="true">
@@ -929,7 +935,9 @@ function FieldSettings({ field, candidates, numberFields, onChange, onChangeType
       ? `Price per ${unitName(per)}`
       : field.type === "checkbox"
         ? "Price when ticked"
-        : "Price when filled in";
+        : field.type === "file"
+          ? "Price when uploaded"
+          : "Price when filled in";
 
   return (
     <s-query-container>
@@ -1216,6 +1224,13 @@ function PreviewField({ field, fields, formatMoney }) {
       );
     case "checkbox":
       return <s-checkbox {...common} />;
+    case "file":
+      return (
+        <s-stack gap="small-300">
+          <s-drop-zone label={label} required={field.required} accept={UPLOAD_ACCEPT} accessibilityLabel={`Upload: ${label}`} />
+          <s-text color="subdued">{details ? `Up to 10 MB · ${details}` : "Up to 10 MB"}</s-text>
+        </s-stack>
+      );
     case "swatch":
       return (
         <s-stack gap="small-300">

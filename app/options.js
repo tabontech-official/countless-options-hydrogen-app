@@ -22,6 +22,42 @@ export const FIELD_TYPES = {
   swatch: { label: "Color swatch", hint: "One pick from colors", icon: "color", choices: true },
   checkboxes: { label: "Checkboxes", hint: "Any number of picks", icon: "list-bulleted", choices: true },
   checkbox: { label: "Single checkbox", hint: "A yes-or-no add-on", icon: "checkbox" },
+  file: { label: "File upload", hint: "A photo, PDF or document", icon: "upload" },
+};
+
+// What customers may upload to a "File upload" question, by extension (browsers often leave
+// the type blank for HEIC and Office files). The theme block's `accept` and
+// product-options-upload.js mirror these two values; app/routes/proxy.upload.jsx enforces them.
+// Shopify stores any of these as a generic file (it accepts anything but HTML).
+export const UPLOAD_TYPES = {
+  // Images
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  heic: "image/heic",
+  // Documents
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  odt: "application/vnd.oasis.opendocument.text",
+  rtf: "application/rtf",
+  txt: "text/plain",
+  // Spreadsheets and slides
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+  csv: "text/csv",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  odp: "application/vnd.oasis.opendocument.presentation",
+};
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const UPLOAD_ACCEPT = Object.keys(UPLOAD_TYPES).map((ext) => `.${ext}`).join(",");
+export const uploadMimeType = (filename) => {
+  const ext = typeof filename === "string" && /\.([^.]+)$/.exec(filename)?.[1].toLowerCase();
+  return (ext && Object.hasOwn(UPLOAD_TYPES, ext) && UPLOAD_TYPES[ext]) || null;
 };
 
 export const MAX_FIELDS = 50;

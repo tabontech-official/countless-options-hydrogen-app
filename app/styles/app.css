@@ -1337,7 +1337,7 @@ textarea {
   padding: 16px;
   border-block-start: 1px solid var(--co-line);
 }
-/* Answer-type picker: a 3×3 grid of cards, each a miniature of what the customer sees. */
+/* Answer-type picker: two even columns of cards, each with a miniature of what the customer sees. */
 .co-picker {
   display: grid;
   gap: 12px;
@@ -1363,14 +1363,15 @@ button.co-link {
 }
 .co-typegrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 .co-type {
   display: grid;
-  gap: 10px;
-  align-content: start;
-  padding: 6px 6px 12px;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 6px 12px 6px 6px;
   border: 0;
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.72);
@@ -1389,7 +1390,6 @@ button.co-link {
 .co-type__text {
   display: grid;
   gap: 2px;
-  padding-inline: 6px;
 }
 .co-type__text strong {
   font-size: 12.5px;
@@ -1449,7 +1449,7 @@ button.co-link {
   --co-accent: var(--co-dark);
   display: grid;
   place-items: center;
-  block-size: 66px;
+  block-size: 56px;
   border-radius: 9px;
   background: linear-gradient(135deg, rgba(236, 230, 255, 0.75), rgba(255, 236, 226, 0.65));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85);
@@ -1500,6 +1500,25 @@ button.co-link {
 }
 .co-type:hover .co-art__caret {
   animation: co-blink 1s steps(1) infinite;
+}
+.co-art__up {
+  position: relative;
+  flex: none;
+  inline-size: 12px;
+  block-size: 12px;
+  border-radius: 50%;
+  background: var(--co-accent);
+}
+.co-art__up::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 4.5px;
+  inset-block-start: 4.5px;
+  inline-size: 3px;
+  block-size: 3px;
+  border: solid #fff;
+  border-width: 1.5px 0 0 1.5px;
+  transform: rotate(45deg);
 }
 .co-art__chev {
   inline-size: 5px;
@@ -1746,7 +1765,7 @@ button.co-link {
     padding: 14px 12px;
   }
   .co-typegrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 }
 
