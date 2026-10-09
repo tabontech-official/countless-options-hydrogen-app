@@ -15,6 +15,22 @@ const appUrl =
       ? `https://${process.env.VERCEL_URL}`
       : "");
 
+// Shopify's Prisma storage checks the database once, when a server instance starts, and keeps
+// a failed check for that instance's whole life. On Vercel, one network blip at start-up made
+// every request on a warm instance fail with "session table does not exist" until a redeploy.
+// Checking again after a failure limits a blip to the requests made during it.
+class SessionStorage extends PrismaSessionStorage {
+  constructor(...args) {
+    super(...args);
+    this.ready.catch(() => {}); // a failed start-up check is retried below, not an unhandled error
+  }
+
+  async ensureReady() {
+    if (!(await this.ready.catch(() => false))) await this.isReady();
+    return super.ensureReady();
+  }
+}
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
@@ -22,7 +38,7 @@ const shopify = shopifyApp({
   scopes: process.env.SCOPES?.split(","),
   appUrl,
   authPathPrefix: "/auth",
-  sessionStorage: new PrismaSessionStorage(prisma),
+  sessionStorage: new SessionStorage(prisma),
   distribution: AppDistribution.AppStore,
   future: {
     expiringOfflineAccessTokens: true,

@@ -1022,10 +1022,14 @@ function MatchCount({ rules, refresh, title, note }) {
     // Waits for typing to pause, so a tag name isn't counted letter by letter.
     const timer = setTimeout(recount, 400);
     // Coming back from another tab (say, after tagging products in Shopify admin) counts again.
-    window.addEventListener("focus", recount);
+    // Inside the admin's frame "focus" only fires on a click, so a visible tab counts too.
+    const onReturn = () => !document.hidden && recount();
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener("focus", recount);
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
@@ -1033,7 +1037,7 @@ function MatchCount({ rules, refresh, title, note }) {
   // sends no signal when it has, so a refresh counts again over the next few seconds.
   useEffect(() => {
     if (!refresh) return;
-    const timers = [1500, 4000, 8000].map((ms) => setTimeout(recount, ms));
+    const timers = [2000, 5000, 10000, 20000].map((ms) => setTimeout(recount, ms));
     return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh]);
