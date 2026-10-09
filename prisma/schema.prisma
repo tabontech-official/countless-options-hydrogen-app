@@ -12,8 +12,6 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  // Migrations skip the pooler: it keeps sessions open, so migrate's advisory lock never releases.
-  directUrl = env("DIRECT_URL")
 }
 
 model Session {
