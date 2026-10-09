@@ -56,7 +56,11 @@ api_version = "2027-01"
   compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
 [auth]
-redirect_urls = [ "https://countless-options-hydrogen-app.vercel.app/api/auth" ]
+redirect_urls = [
+  "https://countless-options-hydrogen-app.vercel.app/auth/callback",
+  "https://countless-options-hydrogen-app.vercel.app/auth/shopify/callback",
+  "https://countless-options-hydrogen-app.vercel.app/api/auth/callback"
+]
 
 [build]
 automatically_update_urls_on_dev = true
