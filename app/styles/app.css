@@ -2224,3 +2224,9 @@ button.co-link {
     background: rgba(255, 255, 255, 0.9);
   }
 }
+
+/* Drag handle on each option card */
+.co-q__grip { display:grid; place-items:center; width:22px; height:32px; border-radius:8px; color:#8a8a99; cursor:grab; }
+.co-q__grip:hover { background:rgba(0,0,0,.05); color:#303030; }
+.co-q__grip:active { cursor:grabbing; }
+.co-qs__item.is-dragging { opacity:.45; }

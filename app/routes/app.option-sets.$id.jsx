@@ -19,7 +19,6 @@ import {
   UPLOAD_ACCEPT,
   answersOf,
   blankCondition,
-  describeRules,
   hasPrices,
   newChoice,
   newField,
@@ -28,7 +27,7 @@ import {
   validateOptionSet,
 } from "../options";
 import { ensurePricing, getProducts, getShopCurrency, ruleMatches, syncProducts } from "../options.server";
-import { StatusBadge, plural } from "../components/OptionSetsTable";
+import { plural } from "../components/OptionSetsTable";
 
 // A set that's gone (deleted, a second Delete click, Back after deleting, another tab)
 // sends the merchant to the list instead of an error page.
@@ -230,6 +229,27 @@ function Editor({ set, currency, serverErrors, unsynced }) {
 
   const moveField = (index, direction) => setFields((fs) => moved(fs, index, direction) ?? fs);
 
+  // Drag and drop reuses the up/down steps, so follow-ups keep moving with their parent.
+  const [dragId, setDragId] = useState(null);
+  const dropOn = (targetId) => {
+    setFields((fs) => {
+      let cur = fs;
+      for (let guard = fs.length; guard > 0; guard--) {
+        const i = cur.findIndex((f) => f.id === dragId);
+        const t = cur.findIndex((f) => f.id === targetId);
+        const dir = Math.sign(t - i);
+        const next = dir && moved(cur, i, dir);
+        if (!next) break;
+        cur = next;
+        const ni = cur.findIndex((f) => f.id === dragId);
+        const nt = cur.findIndex((f) => f.id === targetId);
+        if (dir > 0 ? nt < ni : ni < nt) break;
+      }
+      return cur;
+    });
+    setDragId(null);
+  };
+
   // The copy goes below the original's follow-ups, so they stay under the original.
   const duplicateField = (index) =>
     setFields((fs) => {
@@ -314,14 +334,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
       {/* No entrance animation here: the editor remounts on every save. */}
       <div className="co-wrap">
         <header className="co-edithead">
-          <span className="co-kicker">{isNew ? "New option set" : "Option set"}</span>
           <h1 className="co-heading">{draft.name.trim() || "Untitled option set"}</h1>
-          <span className="co-edithead__meta">
-            <StatusBadge status={draft.status} />
-            {`${plural(draft.fields.length, "question")} · ${
-              draft.rules.mode === "manual" ? plural(draft.products.length, "product") : describeRules(draft.rules)
-            }`}
-          </span>
         </header>
 
         {errors.length > 0 && (
@@ -344,7 +357,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
 
         <div className="co-editor">
           <div className="co-stack co-editor__main">
-            <EditorCard num="01" title="Details" hint="Only you see this name; customers never do.">
+            <EditorCard num="01" title="Details">
               <s-text-field
                 label="Name"
                 value={draft.name}
@@ -355,16 +368,31 @@ function Editor({ set, currency, serverErrors, unsynced }) {
 
             <EditorCard
               num="02"
-              title="Questions"
-              hint="What customers answer on the product page, in this order."
+              title="Product options"
               aside={draft.fields.length > 0 && `${draft.fields.length} / ${MAX_FIELDS}`}
             >
               {draft.fields.length > 0 && (
                 <div className="co-qs">
                   {draft.fields.map((field, index) => (
                     // Follow-ups sit indented under the question they depend on.
-                    <div key={field.id} style={{ "--co-depth": Math.min(depth.get(field.id), 3) }} className="co-qs__item">
+                    <div
+                      key={field.id}
+                      style={{ "--co-depth": Math.min(depth.get(field.id), 3) }}
+                      className={`co-qs__item${dragId === field.id ? " is-dragging" : ""}`}
+                      onDragOver={(e) => dragId && e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        dropOn(field.id);
+                      }}
+                    >
                       <FieldCard
+                        onDragStart={(e) => {
+                          e.dataTransfer.effectAllowed = "move";
+                          e.dataTransfer.setDragImage(e.currentTarget.closest(".co-qs__item"), 20, 20);
+                          setOpenId(null);
+                          setDragId(field.id);
+                        }}
+                        onDragEnd={() => setDragId(null)}
                         field={field}
                         fields={draft.fields}
                         formatMoney={formatMoney}
@@ -400,7 +428,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
                 <div className={draft.fields.length ? "co-picker co-picker--more" : "co-picker"}>
                   <div className="co-picker__head">
                     <span className="co-kicker">
-                      {draft.fields.length ? "Choose an answer type" : "Choose the first question’s answer type"}
+                      {draft.fields.length ? "Add another option — how should shoppers choose?" : "Add your first option — how should shoppers choose?"}
                     </span>
                     {draft.fields.length > 0 && (
                       <button type="button" className="co-link" onClick={() => setPicking(false)}>
@@ -488,6 +516,10 @@ function Editor({ set, currency, serverErrors, unsynced }) {
                   <div className="co-actions">
                     <s-button icon="product" onClick={pickProducts}>
                       {draft.products.length ? "Edit products" : "Select products"}
+                    </s-button>
+                    {/* ponytail: Shopify's picker has no select-all; "All products" also covers products added later. */}
+                    <s-button variant="tertiary" onClick={() => update({ rules: { ...draft.rules, mode: "all" } })}>
+                      Select all products
                     </s-button>
                     {draft.products.length > PRODUCTS_PREVIEW && (
                       <s-button variant="tertiary" onClick={() => setShowAllProducts(!showAllProducts)}>
@@ -1153,7 +1185,7 @@ function placeAfterGroup(fields, id, anchorId) {
   return [...rest.slice(0, at), ...fields.slice(index, end), ...rest.slice(at)];
 }
 
-function FieldCard({ field, fields, formatMoney, followUp, open, canMoveUp, canMoveDown, onToggle, onChange, onChangeType, onMove, onDuplicate, onAddFollowUp, onRemove }) {
+function FieldCard({ field, fields, formatMoney, followUp, open, canMoveUp, canMoveDown, onToggle, onChange, onChangeType, onMove, onDuplicate, onAddFollowUp, onRemove, onDragStart, onDragEnd }) {
   const spec = FIELD_TYPES[field.type];
   const parent = field.condition && fields.find((f) => f.id === field.condition.fieldId);
   const per = field.per && fields.find((f) => f.id === field.per);
@@ -1172,6 +1204,9 @@ function FieldCard({ field, fields, formatMoney, followUp, open, canMoveUp, canM
   return (
     <div className={`co-q${open ? " is-open" : ""}${followUp ? " co-q--follow" : ""}`}>
       <div className="co-q__head">
+        <span className="co-q__grip" draggable title="Drag to reorder" aria-hidden="true" onDragStart={onDragStart} onDragEnd={onDragEnd}>
+          <s-icon type="drag-handle" />
+        </span>
         <span className="co-q__icon">
           <s-icon type={spec.icon} />
         </span>
