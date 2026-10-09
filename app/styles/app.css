@@ -1713,6 +1713,144 @@ button.co-link {
   background: #e8a317;
   opacity: 1;
 }
+/* Same control without the status dot, for choices that aren't a status. */
+.co-segment--plain span::before {
+  display: none;
+}
+
+/* Products: how a set picks them (specific, by conditions, all) and its conditions. */
+.co-assign {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block-end: 16px;
+}
+.co-assign span {
+  block-size: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  line-height: 1.3;
+}
+.co-rules {
+  display: grid;
+  gap: 10px;
+}
+.co-matchmode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  font-size: 12.5px;
+  color: var(--co-ink-2);
+}
+.co-matchmode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--co-ink);
+  cursor: pointer;
+}
+.co-matchmode input {
+  margin: 0;
+  accent-color: var(--co-dark);
+}
+.co-rule {
+  display: grid;
+  gap: 6px;
+}
+/* Under a tag no product has yet: Shopify creates it once a product carries it. */
+.co-newtag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 9px;
+  background: rgba(232, 163, 23, 0.08);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--co-ink-2);
+}
+
+/* Tag, vendor and type suggestions under the field, like Shopify's tag field. */
+.co-suggest {
+  position: relative;
+  min-inline-size: 0;
+}
+.co-suggest__list {
+  position: absolute;
+  z-index: 20;
+  inset-inline: 0;
+  inset-block-start: calc(100% + 4px);
+  display: grid;
+  max-block-size: 260px;
+  padding: 4px;
+  overflow-y: auto;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--co-line), 0 14px 30px -14px rgba(30, 20, 60, 0.35);
+}
+.co-suggest__list button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  color: var(--co-ink);
+  cursor: pointer;
+}
+.co-suggest__list button:hover,
+.co-suggest__list button:focus-visible {
+  background: rgba(91, 71, 224, 0.08);
+  outline: none;
+}
+.co-suggest__list .co-suggest__add {
+  font-weight: 550;
+  color: var(--co-brand);
+}
+.co-suggest__add small {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--co-ink-3);
+}
+
+/* Category search results in their pop-up: a fixed-height list that scrolls. */
+.co-catlist {
+  display: grid;
+  max-block-size: min(360px, 45vh);
+  overflow-y: auto;
+}
+/* Matching products: an icon, the count in bold, one quiet line under it. */
+.co-matchcount {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px var(--co-line);
+}
+.co-matchcount .co-tile {
+  grid-row: span 2;
+}
+.co-matchcount strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--co-ink);
+}
+.co-matchcount small {
+  margin-block-start: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--co-ink-3);
+}
 
 @media (max-width: 900px) {
   .co-editor {

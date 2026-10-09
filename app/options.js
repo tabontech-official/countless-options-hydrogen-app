@@ -60,6 +60,116 @@ export const uploadMimeType = (filename) => {
   return (ext && Object.hasOwn(UPLOAD_TYPES, ext) && UPLOAD_TYPES[ext]) || null;
 };
 
+// How a set picks its products. "manual": the products picked in the editor (OptionSetProduct).
+// "match": products that meet the conditions, re-checked whenever a product is created or edited
+// (webhooks.products.update.jsx) or a collection's products change (webhooks.collections.update.jsx),
+// so a tag added later is enough. "all": every product, including ones added later. For both,
+// syncProducts also records the matched products in OptionSetProduct, so a later change can
+// take the set away again.
+export const ASSIGN_MODES = { manual: "Specific products", match: "By conditions", all: "All products" };
+// The filters of Shopify's own product list. `input` is how the editor asks for the value:
+// typed text, a fixed choice, or a picked resource (stored by ID, shown by `label`).
+export const RULE_FIELDS = {
+  tag: { label: "Tag", input: "text" },
+  vendor: { label: "Vendor", input: "text" },
+  type: { label: "Product type", input: "text" },
+  status: { label: "Status", input: "choice" },
+  category: { label: "Category", input: "pick" },
+  collection: { label: "Collection", input: "pick" },
+  channel: { label: "Sales channel", input: "pick" },
+  catalog: { label: "Catalog", input: "pick" },
+};
+export const PRODUCT_STATUSES = { ACTIVE: "Active", DRAFT: "Draft", ARCHIVED: "Archived", UNLISTED: "Unlisted" };
+// Catalog conditions first ask which kind of catalog, like Shopify's admin.
+export const CATALOG_KINDS = { region: "Region", retail: "Retail", company: "Company location", b2b: "B2B", unassigned: "Unassigned" };
+export const RULE_OPS = { is: "is", not: "is not" };
+export const MAX_CONDITIONS = 10;
+// The hidden product that carries option charges (see ensurePricing) never gets options.
+export const ADDON_TAG = "product-options-addon";
+// The value a condition starts with when its field is chosen.
+export const blankCondition = (field = "tag") => ({
+  field,
+  op: "is",
+  value: field === "status" ? "ACTIVE" : "",
+  ...(field === "catalog" && { kind: "region" }),
+});
+
+// A set's rules with every key present (sets saved before rules existed store {}).
+export const rulesOf = (rules) => ({ mode: "manual", match: "all", conditions: [], ...rules });
+
+// Whether a product gets a set through its rules. `product` is { tags, vendor, productType,
+// status, category: { id }, collections: [GIDs], publications: [GIDs] }: the collections and
+// publications are only the ones the rules name (see syncProducts). Text compares
+// case-insensitively, like Shopify's own tags. Hand-picked sets answer false.
+export function appliesTo(rules, product) {
+  const { mode, match, conditions } = rulesOf(rules);
+  const lower = (s) => String(s ?? "").trim().toLowerCase();
+  const tags = (product?.tags ?? []).map(lower);
+  if (mode === "manual" || !product || tags.includes(ADDON_TAG)) return false;
+  if (mode === "all") return true;
+  const has = (field, value) => {
+    switch (field) {
+      case "tag":
+        return tags.includes(lower(value));
+      case "vendor":
+        return lower(product.vendor) === lower(value);
+      case "type":
+        return lower(product.productType) === lower(value);
+      case "status":
+        return product.status === value;
+      case "category":
+        return product.category?.id === value;
+      case "collection":
+        return (product.collections ?? []).includes(value);
+      default: // channel, catalog: published on that publication
+        return (product.publications ?? []).includes(value);
+    }
+  };
+  const meets = ({ field, op, value }) => (op === "not") !== has(field, value);
+  return conditions.length > 0 && (match === "any" ? conditions.some(meets) : conditions.every(meets));
+}
+
+// The same rules as an Admin product search, to find today's matches when a set is saved and
+// to count them in the editor. A superset is fine: appliesTo has the final say when syncing.
+// ponytail: channels and catalogs use `publication_ids`, which Shopify deprecated in 2025-12;
+// when it's removed, leave those terms out (the search becomes a superset; counts an upper bound).
+export function rulesQuery(rules) {
+  const { mode, match, conditions } = rulesOf(rules);
+  if (mode === "manual") return null;
+  const notAddon = `-tag:${ADDON_TAG}`;
+  if (mode === "all") return notAddon;
+  const quote = (v) => `"${v.replace(/["\\]/g, "\\$&")}"`;
+  const tail = (gid) => gid.split("/").pop();
+  const term = {
+    tag: (v) => `tag:${quote(v)}`,
+    vendor: (v) => `vendor:${quote(v)}`,
+    type: (v) => `product_type:${quote(v)}`,
+    status: (v) => `status:${v.toLowerCase()}`,
+    category: (v) => `category_id:${tail(v)}`,
+    collection: (v) => `collection_id:${tail(v)}`,
+    channel: (v) => `publication_ids:${tail(v)}`,
+    catalog: (v) => `publication_ids:${tail(v)}`,
+  };
+  const terms = conditions.map((c) => (c.op === "not" ? "-" : "") + term[c.field](c.value));
+  return `(${terms.join(match === "any" ? " OR " : " AND ")}) ${notAddon}`;
+}
+
+// "Tag is engraving and Collection is Rings" (then "+ 2 more"), for one-line summaries.
+export function describeRules(rules) {
+  const { mode, match, conditions } = rulesOf(rules);
+  if (mode !== "match") return ASSIGN_MODES[mode];
+  const shown = (c) =>
+    !c.value ? "…"
+    : RULE_FIELDS[c.field].input === "text" ? c.value
+    : c.field === "status" ? PRODUCT_STATUSES[c.value]
+    : c.label;
+  const text = conditions
+    .slice(0, 2)
+    .map((c) => `${RULE_FIELDS[c.field].label} ${RULE_OPS[c.op]} ${shown(c)}`)
+    .join(match === "any" ? " or " : " and ");
+  return conditions.length > 2 ? `${text} + ${conditions.length - 2} more` : text;
+}
+
 export const MAX_FIELDS = 50;
 export const MAX_CHOICES = 100;
 export const MAX_PRICE = 100000;
@@ -113,6 +223,13 @@ const limit = (v) => {
 };
 const HEX = /^#[0-9a-f]{6}$/i;
 const PRODUCT_GID = /^gid:\/\/shopify\/Product\/\d+$/;
+// What a picked condition value must look like. Channels and catalogs are matched by their publication.
+const PICKED_ID = {
+  category: /^gid:\/\/shopify\/TaxonomyCategory\/[\w-]+$/,
+  collection: /^gid:\/\/shopify\/Collection\/\d+$/,
+  channel: /^gid:\/\/shopify\/Publication\/\d+$/,
+  catalog: /^gid:\/\/shopify\/Publication\/\d+$/,
+};
 
 // Trust boundary: the server runs this on every save. Returns cleaned data plus
 // merchant-readable errors (the editor runs it too, for instant feedback).
@@ -231,13 +348,40 @@ export function validateOptionSet(input) {
   }
   errors.push(...multiplierIssues);
 
-  const productIds = [...new Set((Array.isArray(input?.productIds) ? input.productIds : []).filter((id) => PRODUCT_GID.test(id)))];
+  const rules = cleanRules(input?.rules, errors);
+  // Hand-picked products only count for hand-picked sets.
+  const productIds =
+    rules.mode === "manual"
+      ? [...new Set((Array.isArray(input?.productIds) ? input.productIds : []).filter((id) => PRODUCT_GID.test(id)))]
+      : [];
   if (productIds.length > MAX_PRODUCTS) errors.push(`Option sets can be assigned to up to ${MAX_PRODUCTS} products.`);
 
   return {
     errors,
-    data: { name, status: input?.status === "DRAFT" ? "DRAFT" : "ACTIVE", fields, productIds },
+    data: { name, status: input?.status === "DRAFT" ? "DRAFT" : "ACTIVE", fields, rules, productIds },
   };
+}
+
+function cleanRules(input, errors) {
+  const mode = Object.hasOwn(ASSIGN_MODES, input?.mode) ? input.mode : "manual";
+  const raw = mode === "match" && Array.isArray(input?.conditions) ? input.conditions : [];
+  const conditions = raw.slice(0, MAX_CONDITIONS).map((c) => {
+    const field = Object.hasOwn(RULE_FIELDS, c?.field) ? c.field : "tag";
+    const op = c?.op === "not" ? "not" : "is";
+    if (RULE_FIELDS[field].input === "text") return { field, op, value: text(c?.value, 255) };
+    if (field === "status") return { field, op, value: Object.hasOwn(PRODUCT_STATUSES, c?.value) ? c.value : "" };
+    // Picked resources are kept by ID (they can be renamed), with their name for display.
+    const value = PICKED_ID[field].test(c?.value) ? c.value : "";
+    const label = text(c?.label, 255) || RULE_FIELDS[field].label;
+    if (field !== "catalog") return { field, op, value, label };
+    return { field, op, value, label, kind: Object.hasOwn(CATALOG_KINDS, c?.kind) ? c.kind : "region" };
+  });
+  if (mode === "match") {
+    if (!conditions.length) errors.push("Add a condition, or choose another way to pick products.");
+    if (raw.length > MAX_CONDITIONS) errors.push(`Use up to ${MAX_CONDITIONS} conditions.`);
+    if (conditions.some((c) => !c.value)) errors.push("Every condition needs a value: type one, or choose one from the list.");
+  }
+  return { mode, match: input?.match === "any" ? "any" : "all", conditions };
 }
 
 // A product can belong to several sets; first set wins when labels collide,

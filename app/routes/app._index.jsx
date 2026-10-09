@@ -20,6 +20,7 @@ export const loader = async ({ request }) => {
     prisma.optionSet.findFirst({ where: { shop }, orderBy: { updatedAt: "desc" }, select: { id: true } }),
     prisma.optionSet.findMany({ where: { shop, status: "ACTIVE" }, select: { fields: true } }),
     prisma.optionSet.count({ where: { shop, status: "DRAFT" } }),
+    // Hand-picked products and recorded rule matches alike (see syncProducts).
     prisma.optionSetProduct.findMany({
       where: { optionSet: { shop, status: "ACTIVE" } },
       distinct: ["productId"],

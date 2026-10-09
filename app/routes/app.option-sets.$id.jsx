@@ -1,11 +1,33 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useActionData, useFetcher, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { FIELD_TYPES, MAX_FIELDS, MAX_PRICE, MAX_PRODUCTS, UPLOAD_ACCEPT, answersOf, hasPrices, newChoice, newField, validateOptionSet } from "../options";
-import { ensurePricing, getProducts, getShopCurrency, syncProducts } from "../options.server";
+import {
+  ADDON_TAG,
+  ASSIGN_MODES,
+  CATALOG_KINDS,
+  FIELD_TYPES,
+  MAX_CONDITIONS,
+  MAX_FIELDS,
+  MAX_PRICE,
+  MAX_PRODUCTS,
+  PRODUCT_STATUSES,
+  RULE_FIELDS,
+  RULE_OPS,
+  UPLOAD_ACCEPT,
+  answersOf,
+  blankCondition,
+  describeRules,
+  hasPrices,
+  newChoice,
+  newField,
+  rulesOf,
+  rulesQuery,
+  validateOptionSet,
+} from "../options";
+import { ensurePricing, getProducts, getShopCurrency, ruleMatches, syncProducts } from "../options.server";
 import { StatusBadge, plural } from "../components/OptionSetsTable";
 
 // A set that's gone (deleted, a second Delete click, Back after deleting, another tab)
@@ -27,10 +49,11 @@ export const loader = async ({ request, params }) => {
   const created = search.has("created");
   const [currency, products] = await Promise.all([
     getShopCurrency(admin),
-    getProducts(admin, set?.products.map((p) => p.productId) ?? []),
+    // Rule-based sets record their matches too (possibly thousands); only hand-picked ones are listed.
+    getProducts(admin, set && rulesOf(set.rules).mode === "manual" ? set.products.map((p) => p.productId) : []),
   ]);
   if (!set) {
-    return { unsynced, currency, set: { id: null, name: "", status: "ACTIVE", fields: [], products: [], updatedAt: null } };
+    return { unsynced, currency, set: { id: null, name: "", status: "ACTIVE", fields: [], products: [], rules: rulesOf(), updatedAt: null } };
   }
   return {
     unsynced,
@@ -58,6 +81,7 @@ export const loader = async ({ request, params }) => {
         choices: (f.choices ?? []).map((c) => ({ price: null, ...c })),
       })),
       products,
+      rules: rulesOf(set.rules),
       updatedAt: set.updatedAt.toISOString(),
     },
   };
@@ -67,24 +91,27 @@ export const action = async ({ request, params }) => {
   const { admin, session, redirect } = await authenticate.admin(request);
   const { shop } = session;
   const existing = await findSet(shop, params.id, redirect);
-  const before = existing?.products.map((p) => p.productId) ?? [];
+  // Every product a set reaches: picked by hand, or matched by its rules today.
+  // Every product the set reaches now: picked by hand, or recorded as a rule match by syncProducts.
+  const reach = (set) => set?.products.map((p) => p.productId) ?? [];
   const body = await request.json();
 
   if (existing && body.intent === "delete") {
     // Hide it from the storefront first, so a failed sync never leaves orphaned options live.
     await prisma.optionSet.update({ where: { id: existing.id }, data: { status: "DRAFT" } });
-    await syncProducts(admin, shop, before);
+    await syncProducts(admin, shop, reach(existing));
     await prisma.optionSet.delete({ where: { id: existing.id } });
     return redirect("/app/option-sets");
   }
   if (existing && body.intent === "duplicate") {
     const copy = await prisma.optionSet.create({
-      data: { shop, name: `Copy of ${existing.name}`.slice(0, 100), status: "DRAFT", fields: existing.fields },
+      data: { shop, name: `Copy of ${existing.name}`.slice(0, 100), status: "DRAFT", fields: existing.fields, rules: existing.rules },
     });
     return redirect(`/app/option-sets/${copy.id}`);
   }
   if (existing && body.intent === "sync") {
-    await syncProducts(admin, shop, before);
+    // Also searches the rules again, in case the failed sync never recorded new matches.
+    await syncProducts(admin, shop, [...reach(existing), ...(await ruleMatches(admin, existing.rules))]);
     return { toast: "Store updated" };
   }
 
@@ -101,19 +128,23 @@ export const action = async ({ request, params }) => {
     }
   }
 
+  // Products the set reached before saving: they may lose it.
+  const before = reach(existing);
   // Keeps only products that exist in this shop.
   const productIds = (await getProducts(admin, data.productIds)).map((p) => p.id);
-  const values = { name: data.name, status: data.status, fields: data.fields };
+  const values = { name: data.name, status: data.status, fields: data.fields, rules: data.rules };
   const products = productIds.map((productId) => ({ productId }));
+  // Hand-picked sets replace their list. Rule-based sets keep their recorded matches, and
+  // syncProducts adds and removes them, so a failed sync never loses track of a product.
   const saved = existing
     ? await prisma.optionSet.update({
         where: { id: existing.id },
-        data: { ...values, products: { deleteMany: {}, create: products } },
+        data: { ...values, ...(data.rules.mode === "manual" && { products: { deleteMany: {}, create: products } }) },
       })
     : await prisma.optionSet.create({ data: { shop, ...values, products: { create: products } } });
 
   try {
-    await syncProducts(admin, shop, [...new Set([...before, ...productIds])]);
+    await syncProducts(admin, shop, [...before, ...productIds, ...(await ruleMatches(admin, data.rules))]);
   } catch (error) {
     console.error(error);
     if (!existing) return redirect(`/app/option-sets/${saved.id}?unsynced`);
@@ -147,7 +178,7 @@ export default function OptionSetPage() {
   );
 }
 
-const snapshot = (d) => JSON.stringify([d.name, d.status, d.fields, d.products.map((p) => p.id)]);
+const snapshot = (d) => JSON.stringify([d.name, d.status, d.fields, d.products.map((p) => p.id), d.rules]);
 
 function Editor({ set, currency, serverErrors, unsynced }) {
   const shopify = useAppBridge();
@@ -158,7 +189,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
   const submit = useSubmit();
   const navigation = useNavigation();
   const initial = useMemo(
-    () => ({ name: set.name, status: set.status, fields: set.fields, products: set.products }),
+    () => ({ name: set.name, status: set.status, fields: set.fields, products: set.products, rules: set.rules }),
     [set],
   );
   const [draft, setDraft] = useState(initial);
@@ -245,23 +276,19 @@ function Editor({ set, currency, serverErrors, unsynced }) {
   };
   const depth = followUpDepths(draft.fields);
 
-  // The picker adds products directly or via the collections, tags and categories that hold them now.
-  const resolver = useFetcher();
-  const [pickerKey, setPickerKey] = useState(0);
+  // Shopify's own product picker. It opens with the current products ticked, so what comes back
+  // is the new list (removals included). The hidden "Option add-ons" product is left out.
   const [showAllProducts, setShowAllProducts] = useState(false);
-  const addMatching = (body) =>
-    resolver.submit(body, { method: "post", action: "/app/product-filters", encType: "application/json" });
-  useEffect(() => {
-    if (!resolver.data) return;
-    const have = new Set(draft.products.map((p) => p.id));
-    const fresh = resolver.data.products.filter((p) => !have.has(p.id));
-    if (fresh.length) update({ products: [...draft.products, ...fresh] });
-    const more = resolver.data.truncated ? ` (only the first ${MAX_PRODUCTS} matches)` : "";
-    shopify.toast.show(fresh.length ? `Added ${plural(fresh.length, "product")}${more}` : "No new products found");
-    // Runs once per result; draft is read from the render the result arrived in.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolver.data]);
-  const adding = resolver.state !== "idle";
+  const pickProducts = async () => {
+    const picked = await shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: MAX_PRODUCTS,
+      selectionIds: draft.products.map((p) => ({ id: p.id })),
+      filter: { variants: false, query: `-tag:${ADDON_TAG}` },
+    });
+    if (picked) update({ products: picked.map((p) => ({ id: p.id, title: p.title, image: p.images?.[0]?.originalSrc ?? null })) });
+  };
   const visibleProducts = showAllProducts ? draft.products : draft.products.slice(0, PRODUCTS_PREVIEW);
 
   return (
@@ -291,7 +318,9 @@ function Editor({ set, currency, serverErrors, unsynced }) {
           <h1 className="co-heading">{draft.name.trim() || "Untitled option set"}</h1>
           <span className="co-edithead__meta">
             <StatusBadge status={draft.status} />
-            {`${plural(draft.fields.length, "question")} · ${plural(draft.products.length, "product")}`}
+            {`${plural(draft.fields.length, "question")} · ${
+              draft.rules.mode === "manual" ? plural(draft.products.length, "product") : describeRules(draft.rules)
+            }`}
           </span>
         </header>
 
@@ -402,48 +431,77 @@ function Editor({ set, currency, serverErrors, unsynced }) {
             <EditorCard
               num="03"
               title="Products"
-              hint="Adding a collection, tag or category adds the products it has now; products added to it later need adding here too."
-              aside={draft.products.length > 0 && plural(draft.products.length, "product")}
+              hint="Choose which products show these questions."
+              aside={draft.rules.mode === "manual" && draft.products.length > 0 && plural(draft.products.length, "product")}
             >
-              {draft.products.length > 0 ? (
-                <ul className="co-rows">
-                  {visibleProducts.map((product) => (
-                    <li key={product.id} className="co-product">
-                      <s-thumbnail src={product.image ?? undefined} alt={product.title} size="small" />
-                      <span>{product.title}</span>
-                      <s-button
-                        variant="tertiary"
-                        icon="x"
-                        accessibilityLabel={`Remove ${product.title}`}
-                        onClick={() => update({ products: draft.products.filter((p) => p.id !== product.id) })}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="co-empty co-placeholder">These questions only show on the products you choose.</div>
-              )}
-              <div className="co-actions">
-                <s-button
-                  icon="product"
-                  commandFor="product-picker"
-                  command="--show"
-                  loading={adding ? "" : undefined}
-                  onClick={() => setPickerKey((k) => k + 1)}
-                >
-                  {draft.products.length ? "Add products" : "Select products"}
-                </s-button>
-                {draft.products.length > PRODUCTS_PREVIEW && (
-                  <s-button variant="tertiary" onClick={() => setShowAllProducts(!showAllProducts)}>
-                    {showAllProducts ? "Show fewer" : `Show all ${draft.products.length}`}
-                  </s-button>
-                )}
-                {draft.products.length > 1 && (
-                  <s-button variant="tertiary" tone="critical" onClick={() => update({ products: [] })}>
-                    Remove all
-                  </s-button>
-                )}
+              <div className="co-segment co-segment--plain co-assign">
+                {Object.entries(ASSIGN_MODES).map(([mode, label]) => (
+                  <label key={mode}>
+                    <input
+                      type="radio"
+                      name="assign"
+                      value={mode}
+                      checked={draft.rules.mode === mode}
+                      // Conditions start with one empty row, ready to fill in.
+                      onChange={() =>
+                        update({
+                          rules: {
+                            ...draft.rules,
+                            mode,
+                            conditions: draft.rules.conditions.length ? draft.rules.conditions : [blankCondition()],
+                          },
+                        })
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
               </div>
+              {draft.rules.mode === "match" && <RulesEditor rules={draft.rules} onChange={(rules) => update({ rules })} />}
+              {draft.rules.mode === "all" && (
+                <MatchCount
+                  rules={draft.rules}
+                  title={(n) => `All ${plural(n, "product")}`}
+                  note="Products you add later get these questions too."
+                />
+              )}
+              {draft.rules.mode === "manual" && (
+                <>
+                  {draft.products.length > 0 ? (
+                    <ul className="co-rows">
+                      {visibleProducts.map((product) => (
+                        <li key={product.id} className="co-product">
+                          <s-thumbnail src={product.image ?? undefined} alt={product.title} size="small" />
+                          <span>{product.title}</span>
+                          <s-button
+                            variant="tertiary"
+                            icon="x"
+                            accessibilityLabel={`Remove ${product.title}`}
+                            onClick={() => update({ products: draft.products.filter((p) => p.id !== product.id) })}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="co-empty co-placeholder">These questions only show on the products you choose.</div>
+                  )}
+                  <div className="co-actions">
+                    <s-button icon="product" onClick={pickProducts}>
+                      {draft.products.length ? "Edit products" : "Select products"}
+                    </s-button>
+                    {draft.products.length > PRODUCTS_PREVIEW && (
+                      <s-button variant="tertiary" onClick={() => setShowAllProducts(!showAllProducts)}>
+                        {showAllProducts ? "Show fewer" : `Show all ${draft.products.length}`}
+                      </s-button>
+                    )}
+                    {draft.products.length > 1 && (
+                      <s-button variant="tertiary" tone="critical" onClick={() => update({ products: [] })}>
+                        Remove all
+                      </s-button>
+                    )}
+                  </div>
+                </>
+              )}
             </EditorCard>
 
             {!isNew && (
@@ -483,16 +541,11 @@ function Editor({ set, currency, serverErrors, unsynced }) {
         </div>
       </div>
 
-      {/* Stays mounted so the button's open command finds it; the picker inside resets on each open. */}
-      <s-modal id="product-picker" heading="Select products" size="large">
-        {pickerKey > 0 && (
-          <ProductPicker key={pickerKey} added={new Set(draft.products.map((p) => p.id))} onAdd={addMatching} />
-        )}
-      </s-modal>
-
       <s-modal id="delete-modal" heading="Delete option set?">
         <s-paragraph>
-          {`"${set.name}" will be removed from ${plural(set.products.length, "product")}. This can't be undone.`}
+          {`"${set.name}" will be removed from ${
+            set.rules.mode === "manual" ? plural(set.products.length, "product") : "every product it applies to"
+          }. This can't be undone.`}
         </s-paragraph>
         <s-button
           slot="primary-action"
@@ -597,6 +650,407 @@ function TypeArt({ type }) {
   );
 }
 
+const VALUE_HINTS = { tag: "e.g. engraving", vendor: "e.g. Acme Jewelry", type: "e.g. Rings" };
+const VALUE_NOUNS = { tag: "tag", vendor: "vendor", type: "product type" };
+
+// A text field that lists the store's matching values while typing, with "Add" for a new one,
+// like the tag field in Shopify's admin. A new tag needs nothing more: products tagged with
+// it later get the questions.
+function SuggestField({ label, placeholder, value, options, noun, onChange }) {
+  const [open, setOpen] = useState(false);
+  const typed = value.trim();
+  const needle = typed.toLowerCase();
+  const matches = (options ?? []).filter((o) => o.toLowerCase().includes(needle)).slice(0, 8);
+  const isNew = Boolean(typed) && !(options ?? []).some((o) => o.toLowerCase() === needle);
+  const choose = (picked) => {
+    onChange(picked);
+    setOpen(false);
+  };
+  // Entries keep focus in the field when pressed, so the list doesn't close before the click lands.
+  const keepFocus = (e) => e.preventDefault();
+
+  return (
+    <div
+      className="co-suggest"
+      onFocus={() => setOpen(true)}
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setOpen(false)}
+    >
+      <s-text-field
+        label={label}
+        labelAccessibilityVisibility="exclusive"
+        placeholder={placeholder}
+        value={value}
+        onInput={(e) => {
+          onChange(e.currentTarget.value);
+          setOpen(true);
+        }}
+        onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+      />
+      {open && options && (matches.length > 0 || isNew) && (
+        <div className="co-suggest__list" role="listbox" aria-label={`${noun}s in your store`}>
+          {matches.map((o) => (
+            <button key={o} type="button" role="option" aria-selected={o === value} onMouseDown={keepFocus} onClick={() => choose(o)}>
+              {o}
+            </button>
+          ))}
+          {isNew && (
+            <button type="button" role="option" aria-selected={false} className="co-suggest__add" onMouseDown={keepFocus} onClick={() => choose(typed)}>
+              {`Add “${typed}”`}
+              <small>{`New ${noun}`}</small>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Conditions like Shopify's own product filters: "Tag is engraving", "Catalog is Region: Europe".
+// A tag doesn't have to exist yet; products that match later get the questions automatically
+// (webhooks.products.update.jsx, webhooks.collections.update.jsx).
+function RulesEditor({ rules, onChange }) {
+  const shopify = useAppBridge();
+  const suggestions = useFetcher();
+  const channels = useFetcher();
+  const catalogs = useFetcher();
+  // Tags, vendors and types to suggest while typing; loaded once for all rows.
+  useEffect(() => {
+    suggestions.load("/app/rule-values?kind=suggest");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [categoryRow, setCategoryRow] = useState(null);
+
+  // Shopify only has a tag once a product carries it, so a new tag offers to tag products now.
+  const tagger = useFetcher();
+  const [tagged, setTagged] = useState(0); // recounts the matches after tagging
+  const isNewTag = (c) =>
+    c.field === "tag" &&
+    Boolean(c.value.trim()) &&
+    Boolean(suggestions.data) &&
+    !suggestions.data.tag.some((t) => t.toLowerCase() === c.value.trim().toLowerCase());
+  const tagProducts = async (tag) => {
+    const picked = await shopify.resourcePicker({
+      type: "product",
+      action: "add",
+      multiple: MAX_PRODUCTS,
+      filter: { variants: false, query: `-tag:${ADDON_TAG}` },
+    });
+    if (picked?.length) {
+      tagger.submit({ tag, productIds: picked.map((p) => p.id) }, { method: "post", action: "/app/rule-values", encType: "application/json" });
+    }
+  };
+  useEffect(() => {
+    if (!tagger.data) return;
+    if (tagger.data.error) {
+      shopify.toast.show(tagger.data.error, { isError: true });
+      return;
+    }
+    shopify.toast.show(`Added “${tagger.data.tag}” to ${plural(tagger.data.tagged, "product")}`);
+    suggestions.load("/app/rule-values?kind=suggest");
+    setTagged((n) => n + 1);
+    // Runs once per result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tagger.data]);
+
+  const setCondition = (i, patch) =>
+    onChange({ ...rules, conditions: rules.conditions.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
+
+  // Channel and catalog lists load the first time a condition needs them.
+  const needsChannels = rules.conditions.some((c) => c.field === "channel");
+  const needsCatalogs = rules.conditions.some((c) => c.field === "catalog");
+  useEffect(() => {
+    if (needsChannels && !channels.data) channels.load("/app/rule-values?kind=channel");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsChannels]);
+  useEffect(() => {
+    if (needsCatalogs && !catalogs.data) catalogs.load("/app/rule-values?kind=catalog");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsCatalogs]);
+
+  // Collections come from Shopify's own picker: kept by ID, shown by title.
+  const pickCollection = async (i) => {
+    const [picked] = (await shopify.resourcePicker({ type: "collection", action: "select" })) ?? [];
+    if (picked) setCondition(i, { value: picked.id, label: picked.title });
+  };
+
+  const valueControl = (c, i) => {
+    const label = `Condition ${i + 1}: value`;
+    switch (c.field) {
+      case "status":
+        return (
+          <s-select label={label} labelAccessibilityVisibility="exclusive" value={c.value} onChange={(e) => setCondition(i, { value: e.currentTarget.value })}>
+            {Object.entries(PRODUCT_STATUSES).map(([value, name]) => (
+              <s-option key={value} value={value}>
+                {name}
+              </s-option>
+            ))}
+          </s-select>
+        );
+      case "category":
+        return (
+          <s-button icon="categories" commandFor="category-picker" command="--show" onClick={() => setCategoryRow(i)}>
+            {c.value ? c.label : "Choose category"}
+          </s-button>
+        );
+      case "collection":
+        return (
+          <s-button icon="collection" onClick={() => pickCollection(i)}>
+            {c.value ? c.label : "Choose collection"}
+          </s-button>
+        );
+      case "channel":
+        return (
+          <ListSelect
+            label={label}
+            options={channels.data?.options}
+            value={c.value}
+            placeholder="Choose a sales channel"
+            onPick={(o) => setCondition(i, { value: o.value, label: o.label })}
+          />
+        );
+      case "catalog":
+        // First the kind of catalog, then the catalogs of that kind, as in Shopify's admin.
+        return (
+          <s-grid gridTemplateColumns="1fr 1fr" gap="small-300">
+            <s-select
+              label={`Condition ${i + 1}: kind of catalog`}
+              labelAccessibilityVisibility="exclusive"
+              value={c.kind}
+              onChange={(e) => setCondition(i, { kind: e.currentTarget.value, value: "", label: undefined })}
+            >
+              {Object.entries(CATALOG_KINDS).map(([value, name]) => (
+                <s-option key={value} value={value}>
+                  {name}
+                </s-option>
+              ))}
+            </s-select>
+            <ListSelect
+              label={label}
+              options={catalogs.data?.options.filter((o) => o.kind === c.kind)}
+              value={c.value}
+              placeholder="Choose a catalog"
+              onPick={(o) => setCondition(i, { value: o.value, label: o.label })}
+            />
+          </s-grid>
+        );
+      default:
+        return (
+          <SuggestField
+            label={label}
+            placeholder={VALUE_HINTS[c.field]}
+            value={c.value}
+            options={suggestions.data?.[c.field]}
+            noun={VALUE_NOUNS[c.field]}
+            onChange={(value) => setCondition(i, { value })}
+          />
+        );
+    }
+  };
+
+  return (
+    <>
+      <s-query-container>
+        <div className="co-rules">
+          {rules.conditions.length > 1 && (
+            <div className="co-matchmode" role="radiogroup" aria-label="Products must match">
+              <span>Products must match</span>
+              {[
+                ["all", "all conditions"],
+                ["any", "any condition"],
+              ].map(([value, label]) => (
+                <label key={value}>
+                  <input type="radio" name="match" value={value} checked={rules.match === value} onChange={() => onChange({ ...rules, match: value })} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          )}
+          {rules.conditions.map((c, i) => (
+            // Index keys are fine: every input is controlled, so values follow the array.
+            <div key={i} className="co-rule">
+              <s-grid gridTemplateColumns="@container (inline-size > 560px) 9rem 7rem 1fr auto, 1fr 1fr" gap="small-300" alignItems="center">
+                <s-select
+                  label={`Condition ${i + 1}: what to check`}
+                  labelAccessibilityVisibility="exclusive"
+                  value={c.field}
+                  // A new kind of check starts over: a tag name means nothing as a collection.
+                  onChange={(e) => setCondition(i, { ...blankCondition(e.currentTarget.value), op: c.op, label: undefined })}
+                >
+                  {Object.entries(RULE_FIELDS).map(([value, f]) => (
+                    <s-option key={value} value={value}>
+                      {f.label}
+                    </s-option>
+                  ))}
+                </s-select>
+                <s-select
+                  label={`Condition ${i + 1}: is or is not`}
+                  labelAccessibilityVisibility="exclusive"
+                  value={c.op}
+                  onChange={(e) => setCondition(i, { op: e.currentTarget.value })}
+                >
+                  {Object.entries(RULE_OPS).map(([value, name]) => (
+                    <s-option key={value} value={value}>
+                      {name}
+                    </s-option>
+                  ))}
+                </s-select>
+                {valueControl(c, i)}
+                <s-button
+                  variant="tertiary"
+                  icon="delete"
+                  accessibilityLabel={`Remove condition ${i + 1}`}
+                  disabled={rules.conditions.length === 1}
+                  onClick={() => onChange({ ...rules, conditions: rules.conditions.filter((_, j) => j !== i) })}
+                />
+              </s-grid>
+              {isNewTag(c) && (
+                <div className="co-newtag">
+                  <span>{`No product has “${c.value.trim()}” yet. Tags exist once a product has them.`}</span>
+                  <s-button variant="tertiary" icon="plus" loading={tagger.state !== "idle" ? "" : undefined} onClick={() => tagProducts(c.value.trim())}>
+                    Add it to products
+                  </s-button>
+                </div>
+              )}
+            </div>
+          ))}
+          <s-stack direction="inline">
+            <s-button
+              variant="tertiary"
+              icon="plus"
+              disabled={rules.conditions.length >= MAX_CONDITIONS}
+              onClick={() => onChange({ ...rules, conditions: [...rules.conditions, blankCondition()] })}
+            >
+              Add condition
+            </s-button>
+          </s-stack>
+          <MatchCount
+            rules={rules}
+            refresh={tagged}
+            title={(n) => (n ? `${plural(n, "product")} ${n === 1 ? "matches" : "match"} today` : "No products match yet")}
+            note={
+              needsChannels || needsCatalogs
+                ? "New matches are added automatically. Sales channel and catalog changes apply when a product is next edited, or when you save."
+                : "Products that match later get these questions automatically."
+            }
+          />
+        </div>
+      </s-query-container>
+
+      {/* One category search for every row; it starts fresh each time it opens. */}
+      <s-modal id="category-picker" heading="Choose a category">
+        {categoryRow !== null && (
+          <CategorySearch key={categoryRow} onPick={(o) => setCondition(categoryRow, { value: o.value, label: o.label })} />
+        )}
+      </s-modal>
+    </>
+  );
+}
+
+// A select over options loaded from Shopify, with a placeholder until one is chosen.
+function ListSelect({ label, options, value, placeholder, onPick }) {
+  return (
+    <s-select
+      label={label}
+      labelAccessibilityVisibility="exclusive"
+      value={value}
+      disabled={!options}
+      placeholder={!options ? "Loading…" : options.length ? placeholder : "None in your store yet"}
+      onChange={(e) => {
+        const picked = options.find((o) => o.value === e.currentTarget.value);
+        if (picked) onPick(picked);
+      }}
+    >
+      {(options ?? []).map((o) => (
+        <s-option key={o.value} value={o.value}>
+          {o.label}
+        </s-option>
+      ))}
+    </s-select>
+  );
+}
+
+// Shopify's product categories, searched by name ("Rings" finds Apparel & Accessories > Jewelry > Rings).
+function CategorySearch({ onPick }) {
+  const results = useFetcher();
+  const [query, setQuery] = useState("");
+  const search = (value) => {
+    setQuery(value);
+    results.load(`/app/rule-values?kind=category&q=${encodeURIComponent(value)}`);
+  };
+  useEffect(() => {
+    results.load("/app/rule-values?kind=category");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const options = results.data?.kind === "category" && results.state === "idle" ? results.data.options : null;
+
+  return (
+    <s-stack gap="base">
+      <s-search-field
+        label="Search categories"
+        labelAccessibilityVisibility="exclusive"
+        placeholder="Search categories, e.g. Rings"
+        value={query}
+        onInput={(e) => search(e.currentTarget.value)}
+      />
+      <div className="co-catlist">
+        {!options ? (
+          <s-spinner accessibilityLabel="Loading" />
+        ) : options.length ? (
+          options.map((o) => (
+            <s-clickable key={o.value} padding="small" borderRadius="base" commandFor="category-picker" command="--hide" onClick={() => onPick(o)}>
+              <s-text>{o.label}</s-text>
+            </s-clickable>
+          ))
+        ) : (
+          <s-text color="subdued">No categories match.</s-text>
+        )}
+      </div>
+    </s-stack>
+  );
+}
+
+// How many products the rules reach right now, so a condition's effect is visible before saving.
+function MatchCount({ rules, refresh, title, note }) {
+  const counter = useFetcher();
+  const ready = rules.mode !== "match" || rules.conditions.every((c) => c.value.trim());
+  const query = ready ? rulesQuery(rules) : null;
+  // Delayed recounts read the conditions as they are by then, never the ones they started with.
+  const latest = useRef(query);
+  latest.current = query;
+  const recount = () => latest.current && counter.load(`/app/rule-values?kind=count&q=${encodeURIComponent(latest.current)}`);
+  useEffect(() => {
+    // Waits for typing to pause, so a tag name isn't counted letter by letter.
+    const timer = setTimeout(recount, 400);
+    // Coming back from another tab (say, after tagging products in Shopify admin) counts again.
+    window.addEventListener("focus", recount);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", recount);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+  // ponytail: Shopify's product search catches up a few seconds after products are tagged and
+  // sends no signal when it has, so a refresh counts again over the next few seconds.
+  useEffect(() => {
+    if (!refresh) return;
+    const timers = [1500, 4000, 8000].map((ms) => setTimeout(recount, ms));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh]);
+  // The last count for these exact conditions stays up while a new one loads, so it never flickers.
+  const count = counter.data?.kind === "count" && counter.data.q === query ? counter.data.count : null;
+
+  return (
+    <div className="co-matchcount" aria-live="polite">
+      <span className="co-tile" aria-hidden="true">
+        <s-icon type="product" />
+      </span>
+      <strong>{!query ? "Finish the conditions to see matching products" : count == null ? "Counting matching products…" : title(count)}</strong>
+      {query && count != null && <small>{note}</small>}
+    </div>
+  );
+}
+
 // A glass card with the dashboard's numbered heading ("01  Details"), a hint and an optional count.
 function EditorCard({ num, title, hint, aside, children }) {
   return (
@@ -613,158 +1067,6 @@ function EditorCard({ num, title, hint, aside, children }) {
 }
 
 const PRODUCTS_PREVIEW = 10;
-
-// The picker's "Select by" choices: what the list shows and what ticking an entry adds.
-const SELECT_BY = {
-  product: { label: "Products", search: "Search products", empty: "No products found." },
-  collection: {
-    label: "Collections",
-    search: "Search collections",
-    empty: "No collections found.",
-    hint: "Adds every product in the collections you tick.",
-  },
-  tag: { label: "Tags", search: "Search tags", empty: "No tags found.", hint: "Adds every product with the tags you tick." },
-  category: {
-    label: "Categories",
-    search: "Search categories, e.g. Rings",
-    empty: "No categories found.",
-    hint: "Adds every product in the categories you tick.",
-  },
-};
-// About eight rows; capped by the screen height on small laptops.
-const LIST_STYLE = { height: "min(440px, 50vh)", overflowY: "auto" };
-const NOTHING_SELECTED = { product: [], collection: [], tag: [], category: [] };
-
-// Our own picker, because Shopify's resource picker can't select by tag or category.
-// Ticks are kept per "Select by" type, so one pick can mix products, collections, tags and categories.
-function ProductPicker({ added, onAdd }) {
-  const options = useFetcher();
-  const [type, setType] = useState("product");
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState(NOTHING_SELECTED);
-  const spec = SELECT_BY[type];
-  // Tags are loaded once and filtered here; everything else is searched on Shopify.
-  const local = type === "tag";
-
-  const load = (nextType, q) => {
-    const params = new URLSearchParams({ type: nextType });
-    if (nextType !== "tag" && q.trim()) params.set("q", q.trim());
-    options.load(`/app/product-filters?${params}`);
-  };
-  useEffect(() => {
-    load("product", "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const switchType = (next) => {
-    setType(next);
-    setQuery("");
-    load(next, "");
-  };
-  // ponytail: a request per keystroke (the previous one is cancelled); debounce if it gets chatty.
-  const search = (value) => {
-    setQuery(value);
-    if (!local) load(type, value);
-  };
-
-  const needle = query.trim().toLowerCase();
-  // Ignore results still showing from the previous "Select by" choice.
-  const loaded = options.data?.type === type ? options.data.options : null;
-  const list = (loaded ?? []).filter((o) => !local || o.label.toLowerCase().includes(needle));
-  const withImages = type === "product" || type === "collection";
-  const ticked = selected[type];
-  const toggle = (value) =>
-    setSelected((s) => ({ ...s, [type]: s[type].includes(value) ? s[type].filter((v) => v !== value) : [...s[type], value] }));
-  const total = Object.values(selected).flat().length;
-
-  return (
-    <>
-      <s-query-container>
-        <s-stack gap="base">
-          <s-grid gridTemplateColumns="@container (inline-size > 500px) 12rem 1fr, 1fr" gap="small-300" alignItems="end">
-            <s-select label="Select by" value={type} onChange={(e) => switchType(e.currentTarget.value)}>
-              {Object.entries(SELECT_BY).map(([value, s]) => (
-                <s-option key={value} value={value}>
-                  {s.label}
-                </s-option>
-              ))}
-            </s-select>
-            <s-search-field
-              label={spec.search}
-              labelAccessibilityVisibility="exclusive"
-              placeholder={spec.search}
-              value={query}
-              onInput={(e) => search(e.currentTarget.value)}
-            />
-          </s-grid>
-          {spec.hint && <s-text color="subdued">{spec.hint}</s-text>}
-
-          {/* Fixed height, so the pop-up keeps its size while results change; the list scrolls inside. */}
-          <s-box border="base" borderRadius="base" overflow="hidden">
-            <div style={LIST_STYLE}>
-              {!loaded || !list.length ? (
-                <s-stack blockSize="100%" alignItems="center" justifyContent="center" padding="large">
-                  {!loaded ? (
-                    <s-spinner accessibilityLabel="Loading" size="large" />
-                  ) : (
-                    <s-text color="subdued">{local && !needle ? "Your products don't have tags yet." : spec.empty}</s-text>
-                  )}
-                </s-stack>
-              ) : (
-                list.map((o, i) => {
-                  const already = type === "product" && added.has(o.value);
-                  return (
-                    <Fragment key={o.value}>
-                      {i > 0 && <s-divider />}
-                      <s-grid gridTemplateColumns="auto 1fr" gap="base" alignItems="center" padding="small base">
-                        <s-checkbox
-                          label={o.label}
-                          labelAccessibilityVisibility="exclusive"
-                          checked={already || ticked.includes(o.value)}
-                          disabled={already}
-                          onChange={() => toggle(o.value)}
-                        />
-                        {/* Clicking the image or name ticks the row too, like Shopify's own picker. */}
-                        <s-clickable onClick={() => !already && toggle(o.value)} accessibilityLabel={`Select ${o.label}`}>
-                          <s-stack direction="inline" gap="base" alignItems="center">
-                            {withImages && <s-thumbnail src={o.image ?? undefined} alt="" size="small" />}
-                            <s-text>{o.label}</s-text>
-                            {already && <s-badge>Added</s-badge>}
-                          </s-stack>
-                        </s-clickable>
-                      </s-grid>
-                    </Fragment>
-                  );
-                })
-              )}
-            </div>
-          </s-box>
-          <s-text color="subdued">{total ? `${total} selected` : "Nothing selected yet"}</s-text>
-        </s-stack>
-      </s-query-container>
-      <s-button
-        slot="primary-action"
-        variant="primary"
-        disabled={!total}
-        commandFor="product-picker"
-        command="--hide"
-        onClick={() =>
-          onAdd({
-            products: selected.product,
-            collections: selected.collection,
-            tags: selected.tag,
-            categories: selected.category,
-          })
-        }
-      >
-        Add
-      </s-button>
-      <s-button slot="secondary-actions" commandFor="product-picker" command="--hide">
-        Cancel
-      </s-button>
-    </>
-  );
-}
 
 const isPriced = (price) => Number(price) > 0;
 // What a "per" price is counted in: the number field's unit name, else its label.

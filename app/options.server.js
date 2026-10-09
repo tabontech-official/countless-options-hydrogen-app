@@ -1,5 +1,5 @@
 import prisma from "./db.server";
-import { hasPrices, mergeFields } from "./options";
+import { appliesTo, hasPrices, mergeFields, rulesOf, rulesQuery } from "./options";
 
 export const BLOCK_HANDLE = "product_options";
 
@@ -11,25 +11,77 @@ export async function gql(admin, query, variables) {
 const chunks = (list, size) =>
   Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size));
 
-// Rewrites each product's `$app.options` metafield from every ACTIVE set it belongs to.
-// Call with every product whose sets changed (old and new assignments).
+// Key-order-insensitive JSON equality: Shopify may hand a json metafield back with its keys reordered.
+const canonical = (value) =>
+  JSON.stringify(value, (_, v) =>
+    v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v,
+  );
+
+// Rewrites each product's `$app.options` metafield from every ACTIVE set that applies to it:
+// picked by hand, or matched by the set's rules against the product's current tags, vendor,
+// type, status, category, collections and publications (sales channels and catalogs).
+// Call with every product whose sets may have changed (old and new).
+// Only products whose options actually change are written, so the products/update webhook our
+// own write triggers finds nothing to do and stops there. Rule-based sets also get their
+// matches recorded in OptionSetProduct, so a collection change knows which products to recheck.
 // ponytail: DB is written before this runs; if Shopify fails, saving again re-syncs.
 export async function syncProducts(admin, shop, productIds) {
-  if (!productIds.length) return;
-  const links = await prisma.optionSetProduct.findMany({
-    where: { productId: { in: productIds }, optionSet: { shop, status: "ACTIVE" } },
-    select: { productId: true, optionSet: { select: { fields: true } } },
-    orderBy: { optionSet: { createdAt: "asc" } },
-  });
-  const byProduct = new Map(productIds.map((id) => [id, []]));
-  for (const link of links) byProduct.get(link.productId).push(link.optionSet.fields);
+  const ids = [...new Set(productIds)];
+  if (!ids.length) return;
+  const sets = (
+    await prisma.optionSet.findMany({
+      where: { shop, status: "ACTIVE" },
+      select: { id: true, fields: true, rules: true, products: { where: { productId: { in: ids } }, select: { productId: true } } },
+      orderBy: { createdAt: "asc" },
+    })
+  ).map((s) => ({ ...s, rules: rulesOf(s.rules), has: new Set(s.products.map((p) => p.productId)) }));
+  // Collections, sales channels and catalogs are checked with one field per ID the rules name.
+  const named = (fields) => [
+    ...new Set(sets.flatMap((s) => s.rules.conditions.filter((c) => fields.includes(c.field)).map((c) => c.value))),
+  ];
+  const collections = named(["collection"]);
+  const publications = named(["channel", "catalog"]);
 
   const toSet = [];
   const toDelete = [];
-  for (const [ownerId, lists] of byProduct) {
-    const fields = mergeFields(lists);
-    if (fields.length) toSet.push({ ownerId, namespace: "$app", key: "options", type: "json", value: JSON.stringify(fields) });
-    else toDelete.push({ ownerId, namespace: "$app", key: "options" });
+  const matched = [];
+  const unmatched = [];
+  for (const batch of chunks(ids, 250)) {
+    const data = await gql(
+      admin,
+      `#graphql
+      query ProductFacts($ids: [ID!]!${collections.map((_, i) => `, $c${i}: ID!`).join("")}${publications.map((_, i) => `, $p${i}: ID!`).join("")}) {
+        nodes(ids: $ids) {
+          ... on Product {
+            id tags vendor productType status category { id }
+            ${collections.map((_, i) => `c${i}: inCollection(id: $c${i})`).join(" ")}
+            ${publications.map((_, i) => `p${i}: publishedOnPublication(publicationId: $p${i})`).join(" ")}
+            options: metafield(namespace: "$app", key: "options") { value }
+          }
+        }
+      }`,
+      {
+        ids: batch,
+        ...Object.fromEntries(collections.map((id, i) => [`c${i}`, id])),
+        ...Object.fromEntries(publications.map((id, i) => [`p${i}`, id])),
+      },
+    );
+    // Deleted products (and IDs from other shops) come back null and are skipped.
+    for (const product of data.nodes.filter((p) => p?.id)) {
+      product.collections = collections.filter((_, i) => product[`c${i}`]);
+      product.publications = publications.filter((_, i) => product[`p${i}`]);
+      const applying = sets.filter((s) => (s.rules.mode === "manual" ? s.has.has(product.id) : appliesTo(s.rules, product)));
+      for (const s of sets.filter((s) => s.rules.mode !== "manual")) {
+        const row = { optionSetId: s.id, productId: product.id };
+        if (applying.includes(s) && !s.has.has(product.id)) matched.push(row);
+        if (!applying.includes(s) && s.has.has(product.id)) unmatched.push(row);
+      }
+      const fields = mergeFields(applying.map((s) => s.fields));
+      const current = product.options && JSON.parse(product.options.value);
+      if (fields.length ? canonical(current) === canonical(fields) : !current) continue;
+      if (fields.length) toSet.push({ ownerId: product.id, namespace: "$app", key: "options", type: "json", value: JSON.stringify(fields) });
+      else toDelete.push({ ownerId: product.id, namespace: "$app", key: "options" });
+    }
   }
 
   // Both mutations accept at most 25 metafields per call.
@@ -57,6 +109,10 @@ export async function syncProducts(admin, shop, productIds) {
     const [error] = data.metafieldsDelete.userErrors;
     if (error) throw new Error(`Couldn't update products: ${error.message}`);
   }
+
+  // Recorded only once the store is updated, so the records always describe what's live.
+  if (matched.length) await prisma.optionSetProduct.createMany({ data: matched, skipDuplicates: true });
+  for (const rows of chunks(unmatched, 500)) await prisma.optionSetProduct.deleteMany({ where: { OR: rows } });
 }
 
 // Option prices are charged by the cart transform function (extensions/product-options-pricing),
@@ -169,6 +225,33 @@ export async function getShopCurrency(admin) {
     query ShopCurrency { shop { currencyCode } }`,
   );
   return data.shop.currencyCode;
+}
+
+// IDs of the products a set's rules match today, from an Admin product search (empty for
+// hand-picked sets). syncProducts re-checks each one with appliesTo.
+// ponytail: walks every page in the request, fine to a few thousand products; move to a bulk
+// operation if stores with tens of thousands of products use "All products".
+export async function ruleMatches(admin, rules) {
+  const query = rulesQuery(rules);
+  if (!query) return [];
+  const ids = [];
+  let after = null;
+  do {
+    const data = await gql(
+      admin,
+      `#graphql
+      query RuleMatches($query: String!, $after: String) {
+        products(first: 250, after: $after, query: $query) {
+          nodes { id }
+          pageInfo { hasNextPage endCursor }
+        }
+      }`,
+      { query, after },
+    );
+    ids.push(...data.products.nodes.map((p) => p.id));
+    after = data.products.pageInfo.hasNextPage ? data.products.pageInfo.endCursor : null;
+  } while (after);
+  return ids;
 }
 
 // Current title + thumbnail for product GIDs. Only this shop's existing products come back,

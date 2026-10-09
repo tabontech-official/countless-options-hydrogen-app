@@ -52,6 +52,7 @@ export function OptionSetsTable({ sets, toolbar }) {
                   </span>
                   <StatusBadge status={set.status} />
                   <Count n={set.fieldCount} word="question" />
+                  {/* Hand-picked products, or the products a set's rules match (recorded by syncProducts). */}
                   <Count n={set.productCount} word="product" />
                   <span className="co-set__date">{set.updatedAt}</span>
                 </Link>

@@ -42,8 +42,12 @@ const GUIDES = [
       },
       {
         title: "Choose products",
-        text: "Open a set and click Select products. Pick products, collections, tags or categories.",
-        tip: "Collections, tags and categories add the products they contain today. Products added later need adding to the set.",
+        list: [
+          "Specific products: choose them in Shopify’s product picker.",
+          "By conditions: tag, vendor, type, status, category, collection, sales channel or catalog, for example Tag is engraving.",
+          "All products: every product, including ones you add later.",
+        ],
+        tip: "Conditions keep working on their own. Tag a product later and it gets the questions automatically, and the tag doesn’t have to exist yet.",
       },
       {
         title: "Hide a set",
@@ -104,7 +108,7 @@ const GUIDES = [
         title: "Options don't show on a product",
         list: [
           "The option set is Active.",
-          "The product is assigned to the set.",
+          "The product is picked in the set, or matches its conditions.",
           "The Product options block is on your product template, and the theme is saved.",
           "Reinstalled the app? Remove the block and add it again.",
         ],

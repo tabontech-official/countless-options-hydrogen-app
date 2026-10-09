@@ -8,7 +8,8 @@ embedded = true
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # write_files + write_app_proxy: customers' "File upload" answers go to the shop's Files (app/routes/proxy.upload.jsx).
-scopes = "write_products,read_themes,write_cart_transforms,write_publications,write_files,write_app_proxy"
+# read_markets: the Catalog condition groups catalogs by kind (region, retail, company location), as Shopify's admin does.
+scopes = "write_products,read_themes,write_cart_transforms,write_publications,write_files,write_app_proxy,read_markets"
 
 # Storefront path /apps/countless-options/* reaches this app's /proxy/* routes.
 # Merchants can rename it per store in Settings > Apps; product-options-upload.js assumes this default.
@@ -38,6 +39,16 @@ api_version = "2027-01"
   [[webhooks.subscriptions]]
   uri = "/webhooks/products/delete"
   topics = [ "products/delete" ]
+
+  # A product whose tags, vendor or type change may start or stop matching an option set's conditions.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/products/update"
+  topics = [ "products/create", "products/update" ]
+
+  # Products added to or removed from a collection may start or stop matching a Collection condition.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/collections/update"
+  topics = [ "collections/update" ]
 
   # Mandatory for public apps.
   [[webhooks.subscriptions]]

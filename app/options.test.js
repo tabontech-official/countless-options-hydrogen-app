@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { UPLOAD_ACCEPT, hasPrices, mergeFields, uploadMimeType, validateOptionSet } from "./options.js";
+import { UPLOAD_ACCEPT, appliesTo, hasPrices, mergeFields, rulesQuery, uploadMimeType, validateOptionSet } from "./options.js";
 import { priceSelection } from "../extensions/product-options-pricing/src/pricing.js";
 
 const field = (over) => ({ id: "f1", type: "text", label: "Engraving", ...over });
@@ -171,4 +171,72 @@ test("file uploads: allowed types, saved like text, charged once when uploaded",
   assert.equal(priceSelection(data.fields, { u: url }).total, 5);
   assert.deepEqual(priceSelection(data.fields, { u: url }).display, [{ label: "Your artwork", value: url }]);
   assert.equal(priceSelection(data.fields, {}).total, 0);
+});
+
+test("rules: pick products by tag, vendor or type, live", () => {
+  const ring = { tags: ["Engraving", "Gold"], vendor: "Acme", productType: "Rings" };
+  const mug = { tags: [], vendor: "Other", productType: "Mugs" };
+  const rules = (conditions, match = "all") => ({ mode: "match", match, conditions });
+  const tagIs = { field: "tag", op: "is", value: " engraving " };
+
+  assert.equal(appliesTo(rules([tagIs]), ring), true, "tags match case-insensitively");
+  assert.equal(appliesTo(rules([tagIs]), mug), false);
+  assert.equal(appliesTo(rules([{ field: "tag", op: "not", value: "engraving" }]), mug), true);
+  assert.equal(appliesTo(rules([tagIs, { field: "vendor", op: "is", value: "Other" }]), ring), false, "all must match");
+  assert.equal(appliesTo(rules([tagIs, { field: "type", op: "is", value: "mugs" }], "any"), mug), true, "any may match");
+  assert.equal(appliesTo({ mode: "all" }, mug), true);
+  assert.equal(appliesTo({ mode: "all" }, { tags: ["product-options-addon"] }), false, "never the hidden add-on product");
+  assert.equal(appliesTo({}, ring), false, "sets saved before rules are hand-picked");
+
+  assert.equal(rulesQuery({}), null);
+  assert.equal(rulesQuery({ mode: "all" }), "-tag:product-options-addon");
+  assert.equal(
+    rulesQuery(rules([{ field: "tag", op: "is", value: 'say "hi"' }, { field: "type", op: "not", value: "Mugs" }], "any")),
+    '(tag:"say \\"hi\\"" OR -product_type:"Mugs") -tag:product-options-addon',
+  );
+
+  const save = (r, productIds = []) => validateOptionSet({ name: "Set", fields: [field()], rules: r, productIds });
+  assert.deepEqual(save(rules([{ field: "nope", op: "??", value: " gold " }])).data.rules, {
+    mode: "match",
+    match: "all",
+    conditions: [{ field: "tag", op: "is", value: "gold" }],
+  });
+  assert.match(save(rules([])).errors.join(), /Add a condition/);
+  assert.match(save(rules([{ field: "tag", op: "is", value: "  " }])).errors.join(), /needs a value/);
+  assert.deepEqual(save({ mode: "all" }, ["gid://shopify/Product/1"]).data.productIds, [], "rules replace hand-picked products");
+
+  // Collections: matched by ID (from inCollection), searched as collection_id, shown by title.
+  const summer = { field: "collection", op: "is", value: "gid://shopify/Collection/42", label: "Summer" };
+  assert.equal(appliesTo(rules([summer]), { ...ring, collections: ["gid://shopify/Collection/42"] }), true);
+  assert.equal(appliesTo(rules([summer]), { ...ring, collections: [] }), false);
+  assert.equal(appliesTo(rules([{ ...summer, op: "not" }]), mug), true, "no collections known means not in it");
+  assert.equal(rulesQuery(rules([{ ...summer, op: "not" }])), "(-collection_id:42) -tag:product-options-addon");
+  assert.deepEqual(save(rules([summer])).data.rules.conditions, [summer]);
+  assert.match(save(rules([{ ...summer, value: "gid://shopify/Product/42" }])).errors.join(), /needs a value/, "only collection IDs");
+
+  // Status, category, sales channel and catalog, as in Shopify's product filters.
+  const shirt = {
+    tags: [],
+    status: "DRAFT",
+    category: { id: "gid://shopify/TaxonomyCategory/aa-1-13" },
+    publications: ["gid://shopify/Publication/7"],
+  };
+  const online = { field: "channel", op: "is", value: "gid://shopify/Publication/7", label: "Online Store" };
+  const europe = { field: "catalog", op: "is", value: "gid://shopify/Publication/9", label: "Europe", kind: "region" };
+  const tops = { field: "category", op: "is", value: "gid://shopify/TaxonomyCategory/aa-1-13", label: "Tops" };
+  assert.equal(appliesTo(rules([{ field: "status", op: "is", value: "DRAFT" }]), shirt), true);
+  assert.equal(appliesTo(rules([tops, online]), shirt), true);
+  assert.equal(appliesTo(rules([europe]), shirt), false);
+  assert.equal(appliesTo(rules([{ ...europe, op: "not" }]), shirt), true);
+  assert.equal(
+    rulesQuery(rules([{ field: "status", op: "not", value: "ARCHIVED" }, tops, europe])),
+    "(-status:archived AND category_id:aa-1-13 AND publication_ids:9) -tag:product-options-addon",
+  );
+  assert.deepEqual(save(rules([europe, { field: "status", op: "is", value: "NOPE" }])).data.rules.conditions, [
+    europe,
+    { field: "status", op: "is", value: "" },
+  ]);
+  assert.match(save(rules([{ ...tops, value: "rings" }])).errors.join(), /needs a value/, "only category IDs");
+  assert.equal(save(rules([{ ...europe, kind: "moon" }])).data.rules.conditions[0].kind, "region");
+  assert.deepEqual(save(undefined, ["gid://shopify/Product/1"]).data.rules.mode, "manual");
 });
