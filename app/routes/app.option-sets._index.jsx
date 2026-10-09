@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useLoaderData } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { listOptionSets } from "../options.server";
-import { OptionSetsTable } from "../components/OptionSetsTable";
+import { OptionSetsTable, plural } from "../components/OptionSetsTable";
 import { TemplateGallery } from "../components/TemplateGallery";
 import { TEMPLATES } from "../templates";
 
@@ -23,87 +23,106 @@ export default function OptionSets() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
 
-  // ponytail: filtered in the browser; every set is already loaded for the table.
+  // ponytail: filtered in the browser; every set is already loaded for the list.
   const needle = query.trim().toLowerCase();
   const shown = sets.filter(
     (s) =>
       (!status || s.status === status) &&
       (!needle || [s.name, ...s.fieldNames].some((text) => text.toLowerCase().includes(needle))),
   );
+  const count = (value) => (value ? sets.filter((s) => s.status === value).length : sets.length);
 
   return (
-    <s-page heading="Option sets">
+    <s-page heading="Option sets" inlineSize="large">
       <s-button slot="primary-action" variant="primary" href="/app/option-sets/new">
         Create option set
       </s-button>
-      {sets.length ? (
-        <s-section padding="none" accessibilityLabel="Option sets">
-          <OptionSetsTable
-            sets={shown}
-            filters={
-              <s-grid slot="filters" gridTemplateColumns="1fr auto" gap="small-200" alignItems="center">
-                <s-search-field
-                  label="Search option sets"
-                  labelAccessibilityVisibility="exclusive"
-                  placeholder="Search by name or question"
-                  value={query}
-                  onInput={(e) => setQuery(e.currentTarget.value)}
-                />
-                <s-select
-                  label="Status"
-                  labelAccessibilityVisibility="exclusive"
-                  value={status}
-                  onChange={(e) => setStatus(e.currentTarget.value)}
-                >
-                  {STATUSES.map((s) => (
-                    <s-option key={s.value} value={s.value}>
-                      {s.value ? s.label : "All statuses"}
-                    </s-option>
-                  ))}
-                </s-select>
-              </s-grid>
-            }
-          />
-          {shown.length === 0 && (
-            <s-box padding="large">
-              <s-stack alignItems="center" gap="small-200">
+      <div className="co-wrap co-animate">
+        <header className="co-pagehead">
+          <span className="co-kicker">
+            {sets.length ? `${plural(sets.length, "option set")} · ${count("ACTIVE")} active` : "No option sets yet"}
+          </span>
+          <h1 className="co-display">
+            Your <em>option sets</em>
+          </h1>
+          <p className="co-lede">
+            Each set is a group of questions customers answer on the product page. Open one to edit its questions,
+            prices and products.
+          </p>
+        </header>
+
+        {sets.length ? (
+          <>
+            <div className="co-toolbar">
+              <div className="co-pills" role="tablist" aria-label="Status">
+                {STATUSES.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={status === s.value}
+                    className="co-pill"
+                    onClick={() => setStatus(s.value)}
+                  >
+                    {s.label}
+                    <span className="co-pill__count co-mono">{count(s.value)}</span>
+                  </button>
+                ))}
+              </div>
+              <s-search-field
+                label="Search option sets"
+                labelAccessibilityVisibility="exclusive"
+                placeholder="Search by name or question"
+                value={query}
+                onInput={(e) => setQuery(e.currentTarget.value)}
+              />
+            </div>
+            {shown.length ? (
+              <OptionSetsTable sets={shown} />
+            ) : (
+              <div className="co-card co-empty">
                 <s-icon type="search" tone="neutral" />
-                <s-text type="strong">No option sets match</s-text>
-                <s-text color="subdued">Try a different search or status.</s-text>
-              </s-stack>
-            </s-box>
-          )}
-        </s-section>
-      ) : (
-        <EmptyState />
-      )}
+                No option sets match. Try a different search or status.
+              </div>
+            )}
+          </>
+        ) : (
+          <EmptyState />
+        )}
+      </div>
     </s-page>
   );
 }
 
 function EmptyState() {
   return (
-    <div className="co-stack">
-      <s-section accessibilityLabel="No option sets yet">
-        <s-grid gap="base" justifyItems="center" paddingBlock="large">
-          <s-grid justifyItems="center" maxInlineSize="460px" gap="base">
-            <s-stack alignItems="center" gap="small-200">
-              <s-heading>Add custom options to your products</s-heading>
-              <s-paragraph color="subdued">
-                Collect engraving text, gift messages, color choices and more, without creating extra variants.
-              </s-paragraph>
-            </s-stack>
-            <s-stack direction="inline" gap="small-200">
-              <s-button variant="primary" href="/app/option-sets/new">
-                Start from scratch
-              </s-button>
-              <s-button href="/app/templates">Browse all templates</s-button>
-            </s-stack>
-          </s-grid>
-        </s-grid>
-      </s-section>
-      <TemplateGallery templates={TEMPLATES.slice(0, 3)} />
-    </div>
+    <>
+      <section className="co-glass co-card co-start">
+        <h2 className="co-heading co-heading--small">
+          Add custom options <em>to your products</em>
+        </h2>
+        <p>Collect engraving text, gift messages, color choices and more, without creating extra variants.</p>
+        <div className="co-hero__actions">
+          <Link className="co-btn co-btn--dark" to="/app/option-sets/new">
+            Start from scratch
+          </Link>
+          <Link className="co-btn co-btn--glass" to="/app/templates">
+            Browse all templates
+          </Link>
+        </div>
+      </section>
+      <section className="co-block">
+        <div className="co-blockhead">
+          <h2 className="co-heading co-heading--small">
+            Or start from a <em>template</em>
+          </h2>
+          <Link className="co-link" to="/app/templates">
+            All templates
+          </Link>
+        </div>
+        <TemplateGallery templates={TEMPLATES.slice(0, 4)} />
+      </section>
+    </>
   );
 }
 

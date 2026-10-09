@@ -4,9 +4,9 @@ import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { FIELD_TYPES, MAX_PRICE, MAX_PRODUCTS, answersOf, hasPrices, newChoice, newField, validateOptionSet } from "../options";
+import { FIELD_TYPES, MAX_FIELDS, MAX_PRICE, MAX_PRODUCTS, answersOf, hasPrices, newChoice, newField, validateOptionSet } from "../options";
 import { ensurePricing, getProducts, getShopCurrency, syncProducts } from "../options.server";
-import { plural } from "../components/OptionSetsTable";
+import { StatusBadge, plural } from "../components/OptionSetsTable";
 
 async function findSet(shop, id) {
   if (id === "new") return null;
@@ -161,6 +161,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
   );
   const [draft, setDraft] = useState(initial);
   const [openId, setOpenId] = useState(null);
+  const [picking, setPicking] = useState(false);
   const [clientErrors, setClientErrors] = useState([]);
 
   const isNew = !set.id;
@@ -190,6 +191,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
     const field = newField(type);
     setFields((fs) => [...fs, field]);
     setOpenId(field.id);
+    setPicking(false);
   };
 
   const moveField = (index, direction) => setFields((fs) => moved(fs, index, direction) ?? fs);
@@ -260,7 +262,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
   const visibleProducts = showAllProducts ? draft.products : draft.products.slice(0, PRODUCTS_PREVIEW);
 
   return (
-    <s-page heading={isNew ? "Create option set" : set.name}>
+    <s-page heading={isNew ? "Create option set" : set.name} inlineSize="large">
       <s-link slot="breadcrumb-actions" href="/app/option-sets">
         Option sets
       </s-link>
@@ -279,137 +281,204 @@ function Editor({ set, currency, serverErrors, unsynced }) {
         </button>
       </SaveBar>
 
-      {errors.length > 0 && (
-        <s-banner tone="critical" heading={`Fix ${plural(errors.length, "issue")} before saving`}>
-          <s-unordered-list>
-            {errors.map((error) => (
-              <s-list-item key={error}>{error}</s-list-item>
-            ))}
-          </s-unordered-list>
-        </s-banner>
-      )}
-      {unsynced && (
-        <s-banner tone="warning" heading="Saved, but your store wasn't fully updated">
-          Some products may still show their previous options.
-          <s-button slot="secondary-actions" onClick={() => post({ intent: "sync" })}>
-            Try again
-          </s-button>
-        </s-banner>
-      )}
+      {/* No entrance animation here: the editor remounts on every save. */}
+      <div className="co-wrap">
+        <header className="co-edithead">
+          <span className="co-kicker">{isNew ? "New option set" : "Option set"}</span>
+          <h1 className="co-heading">{draft.name.trim() || "Untitled option set"}</h1>
+          <span className="co-edithead__meta">
+            <StatusBadge status={draft.status} />
+            {`${plural(draft.fields.length, "question")} · ${plural(draft.products.length, "product")}`}
+          </span>
+        </header>
 
-      <s-section heading="Details">
-        <s-text-field
-          label="Name"
-          value={draft.name}
-          placeholder="e.g. Engraving options"
-          details="Only you see this name."
-          onInput={(e) => update({ name: e.currentTarget.value })}
-        />
-      </s-section>
-
-      <s-section heading="Fields">
-        <s-stack gap="base">
-          {draft.fields.length === 0 && (
-            <s-paragraph color="subdued">
-              Add the questions customers answer on the product page, like a
-              metal type, a size or engraving text.
-            </s-paragraph>
-          )}
-          {draft.fields.map((field, index) => (
-            // Follow-ups sit indented under the question they depend on.
-            <s-box key={field.id} paddingInlineStart={INDENTS[Math.min(depth.get(field.id), INDENTS.length - 1)]}>
-              <FieldCard
-                field={field}
-                fields={draft.fields}
-                formatMoney={formatMoney}
-                open={openId === field.id}
-                onToggle={() => setOpenId(openId === field.id ? null : field.id)}
-                onChange={(patch) => updateField(field.id, patch)}
-                onChangeType={(type) => changeType(field, type)}
-                canMoveUp={Boolean(moved(draft.fields, index, -1))}
-                canMoveDown={Boolean(moved(draft.fields, index, 1))}
-                onMove={(direction) => moveField(index, direction)}
-                onDuplicate={() => duplicateField(index)}
-                onAddFollowUp={() => addFollowUp(field)}
-                onRemove={() =>
-                  // Follow-up fields of a removed field become always visible.
-                  setFields((fs) =>
-                    fs
-                      .filter((f) => f.id !== field.id)
-                      .map((f) => ({
-                        ...f,
-                        condition: f.condition?.fieldId === field.id ? null : f.condition,
-                        per: f.per === field.id ? null : f.per,
-                      })),
-                  )
-                }
-              />
-            </s-box>
-          ))}
-          <s-stack direction="inline">
-            <s-button icon="plus" commandFor="add-field-menu">
-              Add field
-            </s-button>
-          </s-stack>
-          <s-menu id="add-field-menu" accessibilityLabel="Field types">
-            {Object.entries(FIELD_TYPES).map(([type, spec]) => (
-              <s-button key={type} icon={spec.icon} onClick={() => addField(type)}>
-                {spec.label}
-              </s-button>
-            ))}
-          </s-menu>
-        </s-stack>
-      </s-section>
-
-      <s-section heading="Products">
-        <s-stack gap="base">
-          <s-paragraph color="subdued">
-            These fields show on the product pages below. Adding a collection,
-            tag or category adds the products it has now; products added to it
-            later need to be added here too.
-          </s-paragraph>
-          {draft.products.length > 0 && (
-            <s-box border="base" borderRadius="base">
-              {visibleProducts.map((product, i) => (
-                <Fragment key={product.id}>
-                  {i > 0 && <s-divider />}
-                  <s-grid gridTemplateColumns="auto 1fr auto" gap="base" alignItems="center" padding="small">
-                    <s-thumbnail src={product.image ?? undefined} alt={product.title} size="small" />
-                    <s-text>{product.title}</s-text>
-                    <s-button
-                      variant="tertiary"
-                      icon="x"
-                      accessibilityLabel={`Remove ${product.title}`}
-                      onClick={() => update({ products: draft.products.filter((p) => p.id !== product.id) })}
-                    />
-                  </s-grid>
-                </Fragment>
+        {errors.length > 0 && (
+          <s-banner tone="critical" heading={`Fix ${plural(errors.length, "issue")} before saving`}>
+            <s-unordered-list>
+              {errors.map((error) => (
+                <s-list-item key={error}>{error}</s-list-item>
               ))}
-            </s-box>
-          )}
-          <s-stack direction="inline" gap="base" alignItems="center">
-            <s-button
-              icon="product"
-              commandFor="product-picker"
-              command="--show"
-              loading={adding ? "" : undefined}
-              onClick={() => setPickerKey((k) => k + 1)}
-            >
-              {draft.products.length ? "Add products" : "Select products"}
+            </s-unordered-list>
+          </s-banner>
+        )}
+        {unsynced && (
+          <s-banner tone="warning" heading="Saved, but your store wasn't fully updated">
+            Some products may still show their previous options.
+            <s-button slot="secondary-actions" onClick={() => post({ intent: "sync" })}>
+              Try again
             </s-button>
-            {draft.products.length > PRODUCTS_PREVIEW && (
-              <s-button variant="tertiary" onClick={() => setShowAllProducts(!showAllProducts)}>
-                {showAllProducts ? "Show fewer" : `Show all ${draft.products.length}`}
-              </s-button>
+          </s-banner>
+        )}
+
+        <div className="co-editor">
+          <div className="co-stack co-editor__main">
+            <EditorCard num="01" title="Details" hint="Only you see this name; customers never do.">
+              <s-text-field
+                label="Name"
+                value={draft.name}
+                placeholder="e.g. Engraving options"
+                onInput={(e) => update({ name: e.currentTarget.value })}
+              />
+            </EditorCard>
+
+            <EditorCard
+              num="02"
+              title="Questions"
+              hint="What customers answer on the product page, in this order."
+              aside={draft.fields.length > 0 && `${draft.fields.length} / ${MAX_FIELDS}`}
+            >
+              {draft.fields.length > 0 && (
+                <div className="co-qs">
+                  {draft.fields.map((field, index) => (
+                    // Follow-ups sit indented under the question they depend on.
+                    <div key={field.id} style={{ "--co-depth": Math.min(depth.get(field.id), 3) }} className="co-qs__item">
+                      <FieldCard
+                        field={field}
+                        fields={draft.fields}
+                        formatMoney={formatMoney}
+                        followUp={depth.get(field.id) > 0}
+                        open={openId === field.id}
+                        onToggle={() => setOpenId(openId === field.id ? null : field.id)}
+                        onChange={(patch) => updateField(field.id, patch)}
+                        onChangeType={(type) => changeType(field, type)}
+                        canMoveUp={Boolean(moved(draft.fields, index, -1))}
+                        canMoveDown={Boolean(moved(draft.fields, index, 1))}
+                        onMove={(direction) => moveField(index, direction)}
+                        onDuplicate={() => duplicateField(index)}
+                        onAddFollowUp={() => addFollowUp(field)}
+                        onRemove={() =>
+                          // Follow-up fields of a removed field become always visible.
+                          setFields((fs) =>
+                            fs
+                              .filter((f) => f.id !== field.id)
+                              .map((f) => ({
+                                ...f,
+                                condition: f.condition?.fieldId === field.id ? null : f.condition,
+                                per: f.per === field.id ? null : f.per,
+                              })),
+                          )
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Open until the first question exists; after that, behind one "Add a question" button. */}
+              {picking || !draft.fields.length ? (
+                <div className={draft.fields.length ? "co-picker co-picker--more" : "co-picker"}>
+                  <div className="co-picker__head">
+                    <span className="co-kicker">
+                      {draft.fields.length ? "Choose an answer type" : "Choose the first question’s answer type"}
+                    </span>
+                    {draft.fields.length > 0 && (
+                      <button type="button" className="co-link" onClick={() => setPicking(false)}>
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                  <div className="co-typegrid">
+                    {Object.entries(FIELD_TYPES).map(([type, spec]) => (
+                      <button key={type} type="button" className="co-type" onClick={() => addField(type)}>
+                        <TypeArt type={type} />
+                        <span className="co-type__text">
+                          <strong>{spec.label}</strong>
+                          <small>{spec.hint}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="co-addbtn" onClick={() => setPicking(true)}>
+                  <span aria-hidden="true">+</span>
+                  Add a question
+                </button>
+              )}
+            </EditorCard>
+
+            <EditorCard
+              num="03"
+              title="Products"
+              hint="Adding a collection, tag or category adds the products it has now; products added to it later need adding here too."
+              aside={draft.products.length > 0 && plural(draft.products.length, "product")}
+            >
+              {draft.products.length > 0 ? (
+                <ul className="co-rows">
+                  {visibleProducts.map((product) => (
+                    <li key={product.id} className="co-product">
+                      <s-thumbnail src={product.image ?? undefined} alt={product.title} size="small" />
+                      <span>{product.title}</span>
+                      <s-button
+                        variant="tertiary"
+                        icon="x"
+                        accessibilityLabel={`Remove ${product.title}`}
+                        onClick={() => update({ products: draft.products.filter((p) => p.id !== product.id) })}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="co-empty co-placeholder">These questions only show on the products you choose.</div>
+              )}
+              <div className="co-actions">
+                <s-button
+                  icon="product"
+                  commandFor="product-picker"
+                  command="--show"
+                  loading={adding ? "" : undefined}
+                  onClick={() => setPickerKey((k) => k + 1)}
+                >
+                  {draft.products.length ? "Add products" : "Select products"}
+                </s-button>
+                {draft.products.length > PRODUCTS_PREVIEW && (
+                  <s-button variant="tertiary" onClick={() => setShowAllProducts(!showAllProducts)}>
+                    {showAllProducts ? "Show fewer" : `Show all ${draft.products.length}`}
+                  </s-button>
+                )}
+                {draft.products.length > 1 && (
+                  <s-button variant="tertiary" tone="critical" onClick={() => update({ products: [] })}>
+                    Remove all
+                  </s-button>
+                )}
+              </div>
+            </EditorCard>
+
+            {!isNew && (
+              <div className="co-actions co-actions--end">
+                <s-button tone="critical" commandFor="delete-modal" command="--show">
+                  Delete option set
+                </s-button>
+              </div>
             )}
-            {draft.products.length > 1 && (
-              <s-button variant="tertiary" tone="critical" onClick={() => update({ products: [] })}>
-                Remove all
-              </s-button>
-            )}
-          </s-stack>
-        </s-stack>
-      </s-section>
+          </div>
+
+          <aside className="co-stack co-editor__aside">
+            <EditorCard title="Status" hint={draft.status === "ACTIVE" ? "Customers see these options." : "Hidden from your store."}>
+              {/* Native radios: arrow keys and screen readers work without extra code. */}
+              <div className="co-segment">
+                {[
+                  ["ACTIVE", "Active"],
+                  ["DRAFT", "Draft"],
+                ].map(([value, label]) => (
+                  <label key={value}>
+                    <input
+                      type="radio"
+                      name="status"
+                      value={value}
+                      checked={draft.status === value}
+                      onChange={() => update({ status: value })}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </EditorCard>
+            <EditorCard title="Preview">
+              <Preview fields={draft.fields} formatMoney={formatMoney} />
+            </EditorCard>
+          </aside>
+        </div>
+      </div>
 
       {/* Stays mounted so the button's open command finds it; the picker inside resets on each open. */}
       <s-modal id="product-picker" heading="Select products" size="large">
@@ -417,31 +486,6 @@ function Editor({ set, currency, serverErrors, unsynced }) {
           <ProductPicker key={pickerKey} added={new Set(draft.products.map((p) => p.id))} onAdd={addMatching} />
         )}
       </s-modal>
-
-      {!isNew && (
-        <s-stack direction="inline" justifyContent="end">
-          <s-button tone="critical" commandFor="delete-modal" command="--show">
-            Delete option set
-          </s-button>
-        </s-stack>
-      )}
-
-      <s-section slot="aside" heading="Status">
-        <s-select
-          label="Status"
-          labelAccessibilityVisibility="exclusive"
-          value={draft.status}
-          details={draft.status === "ACTIVE" ? "Customers see these options." : "Hidden from your store."}
-          onChange={(e) => update({ status: e.currentTarget.value })}
-        >
-          <s-option value="ACTIVE">Active</s-option>
-          <s-option value="DRAFT">Draft</s-option>
-        </s-select>
-      </s-section>
-
-      <s-section slot="aside" heading="Preview">
-        <Preview fields={draft.fields} formatMoney={formatMoney} />
-      </s-section>
 
       <s-modal id="delete-modal" heading="Delete option set?">
         <s-paragraph>
@@ -455,6 +499,100 @@ function Editor({ set, currency, serverErrors, unsynced }) {
         </s-button>
       </s-modal>
     </s-page>
+  );
+}
+
+// A miniature of each answer type as customers see it, drawn in CSS (see .co-art in app.css).
+function TypeArt({ type }) {
+  const line = (width) => <i className="co-art__line" style={{ inlineSize: width }} />;
+  const art = {
+    text: (
+      <span className="co-art__field">
+        {line("42%")}
+        <i className="co-art__caret" />
+      </span>
+    ),
+    textarea: (
+      <span className="co-art__field co-art__field--tall">
+        {line("88%")}
+        {line("72%")}
+        {line("40%")}
+      </span>
+    ),
+    number: (
+      <span className="co-art__field co-art__field--stepper">
+        <b>−</b>
+        <b>2</b>
+        <b>+</b>
+      </span>
+    ),
+    date: (
+      <span className="co-art__cal">
+        {Array.from({ length: 14 }, (_, i) => (
+          <i key={i} className={i === 9 ? "is-on" : undefined} />
+        ))}
+      </span>
+    ),
+    select: (
+      <span className="co-art__field">
+        {line("50%")}
+        <i className="co-art__chev" />
+      </span>
+    ),
+    radio: (
+      <span className="co-art__row">
+        <i className="co-art__pill is-on" />
+        <i className="co-art__pill" />
+        <i className="co-art__pill" />
+      </span>
+    ),
+    swatch: (
+      <span className="co-art__row">
+        {["#d6b98c", "#e9b8c0", "#a9bfa4"].map((color, i) => (
+          <i key={color} className={i ? "co-art__dot" : "co-art__dot is-on"} style={{ background: color }} />
+        ))}
+      </span>
+    ),
+    checkboxes: (
+      <span className="co-art__list">
+        <span>
+          <i className="co-art__box is-on" />
+          {line("62%")}
+        </span>
+        <span>
+          <i className="co-art__box" />
+          {line("44%")}
+        </span>
+      </span>
+    ),
+    checkbox: (
+      <span className="co-art__list">
+        <span>
+          <i className="co-art__box is-on" />
+          {line("56%")}
+        </span>
+      </span>
+    ),
+  };
+  return (
+    <span className="co-art" aria-hidden="true">
+      {art[type]}
+    </span>
+  );
+}
+
+// A glass card with the dashboard's numbered heading ("01  Details"), a hint and an optional count.
+function EditorCard({ num, title, hint, aside, children }) {
+  return (
+    <section className="co-glass co-card co-editcard">
+      <header className="co-cardhead">
+        {num && <span className="co-cardhead__num co-mono">{num}</span>}
+        <h2>{title}</h2>
+        {aside && <span className="co-cardhead__aside co-mono">{aside}</span>}
+        {hint && <p>{hint}</p>}
+      </header>
+      {children}
+    </section>
   );
 }
 
@@ -615,7 +753,6 @@ function ProductPicker({ added, onAdd }) {
 const isPriced = (price) => Number(price) > 0;
 // What a "per" price is counted in: the number field's unit name, else its label.
 const unitName = (numberField) => numberField?.unit || numberField?.label || "unit";
-const INDENTS = [undefined, "large-200", "large-400", "large-500"];
 
 // How deep each field sits in the follow-up tree (0 = always shown).
 function followUpDepths(fields) {
@@ -694,7 +831,7 @@ function placeAfterGroup(fields, id, anchorId) {
   return [...rest.slice(0, at), ...fields.slice(index, end), ...rest.slice(at)];
 }
 
-function FieldCard({ field, fields, formatMoney, open, canMoveUp, canMoveDown, onToggle, onChange, onChangeType, onMove, onDuplicate, onAddFollowUp, onRemove }) {
+function FieldCard({ field, fields, formatMoney, followUp, open, canMoveUp, canMoveDown, onToggle, onChange, onChangeType, onMove, onDuplicate, onAddFollowUp, onRemove }) {
   const spec = FIELD_TYPES[field.type];
   const parent = field.condition && fields.find((f) => f.id === field.condition.fieldId);
   const per = field.per && fields.find((f) => f.id === field.per);
@@ -711,16 +848,16 @@ function FieldCard({ field, fields, formatMoney, open, canMoveUp, canMoveDown, o
   const menuId = `field-menu-${field.id}`;
 
   return (
-    <s-box border="base" borderRadius="base">
-      <s-grid gridTemplateColumns="auto 1fr auto" gap="small-300" alignItems="center" padding="small">
-        <s-icon type={spec.icon} />
-        <s-clickable onClick={onToggle} accessibilityLabel={`${open ? "Collapse" : "Edit"} ${field.label || "field"}`}>
-          <s-stack gap="small-500">
-            <s-text type="strong">{field.label || "Untitled field"}</s-text>
-            <s-text color="subdued">{summary}</s-text>
-          </s-stack>
-        </s-clickable>
-        <s-stack direction="inline" gap="small-500" alignItems="center">
+    <div className={`co-q${open ? " is-open" : ""}${followUp ? " co-q--follow" : ""}`}>
+      <div className="co-q__head">
+        <span className="co-q__icon">
+          <s-icon type={spec.icon} />
+        </span>
+        <button type="button" className="co-q__title" aria-expanded={open} onClick={onToggle}>
+          <strong>{field.label || "Untitled field"}</strong>
+          <small>{summary}</small>
+        </button>
+        <span className="co-q__actions">
           <s-button variant="tertiary" icon="arrow-up" accessibilityLabel="Move up" disabled={!canMoveUp} onClick={() => onMove(-1)} />
           <s-button variant="tertiary" icon="arrow-down" accessibilityLabel="Move down" disabled={!canMoveDown} onClick={() => onMove(1)} />
           <s-button variant="tertiary" icon="menu-vertical" accessibilityLabel="More actions" commandFor={menuId} />
@@ -738,25 +875,22 @@ function FieldCard({ field, fields, formatMoney, open, canMoveUp, canMoveDown, o
             </s-button>
           </s-menu>
           <s-button variant="tertiary" icon={open ? "chevron-up" : "chevron-down"} accessibilityLabel={open ? "Collapse" : "Expand"} onClick={onToggle} />
-        </s-stack>
-      </s-grid>
+        </span>
+      </div>
       {open && (
-        <>
-          <s-divider />
-          <s-box padding="base">
-            <FieldSettings
-              field={field}
-              // Any other question except its own follow-ups (that would loop); picking one
-              // moves this field under it.
-              candidates={fields.filter((f) => f.id !== field.id && !isUnder(fields, f, field.id))}
-              numberFields={fields.filter((f) => f.type === "number")}
-              onChange={onChange}
-              onChangeType={onChangeType}
-            />
-          </s-box>
-        </>
+        <div className="co-q__body">
+          <FieldSettings
+            field={field}
+            // Any other question except its own follow-ups (that would loop); picking one
+            // moves this field under it.
+            candidates={fields.filter((f) => f.id !== field.id && !isUnder(fields, f, field.id))}
+            numberFields={fields.filter((f) => f.type === "number")}
+            onChange={onChange}
+            onChangeType={onChangeType}
+          />
+        </div>
       )}
-    </s-box>
+    </div>
   );
 }
 

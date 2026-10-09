@@ -1027,6 +1027,667 @@ textarea {
   color: var(--co-ink-2);
 }
 
+/* ---------- Option sets list ---------- */
+
+.co-pill__count {
+  margin-inline-start: 6px;
+  font-size: 11px;
+  opacity: 0.6;
+}
+.co-sets {
+  padding: 6px;
+}
+.co-sets ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.co-sets__head,
+.co-set {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 72px 96px 92px 14px;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 14px;
+}
+.co-sets__head {
+  padding-block: 10px 6px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--co-ink-3);
+}
+.co-sets__head span:nth-child(5) {
+  text-align: end;
+}
+/* Hairlines between rows that step aside for the hovered row, like the ring legend. */
+.co-sets li {
+  position: relative;
+}
+.co-sets li + li::before {
+  content: "";
+  position: absolute;
+  inset: 0 14px auto;
+  border-block-start: 1px solid var(--co-line);
+}
+.co-sets li:hover::before,
+.co-sets li:hover + li::before {
+  border-color: transparent;
+}
+.co-set {
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.15s var(--co-ease);
+}
+.co-set:hover {
+  background: rgba(255, 255, 255, 0.75);
+}
+.co-set:focus-visible {
+  outline: 2px solid var(--co-brand);
+  outline-offset: -2px;
+}
+.co-set .co-state {
+  justify-self: start;
+}
+.co-set__main {
+  min-inline-size: 0;
+}
+.co-set__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--co-ink);
+}
+.co-set__fields {
+  display: block;
+  margin-block-start: 3px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--co-ink-3);
+}
+.co-set__stat {
+  font-size: 12px;
+  color: var(--co-ink-2);
+}
+.co-set__date {
+  text-align: end;
+  font-size: 12px;
+  color: var(--co-ink-3);
+}
+.co-set__arrow {
+  font-size: 13px;
+  color: var(--co-ink-3);
+  transition: transform 0.2s var(--co-ease), color 0.2s ease;
+}
+.co-set:hover .co-set__arrow {
+  color: var(--co-brand);
+  transform: translateX(3px);
+}
+.co-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(91, 71, 224, 0.1);
+  font-size: 10.5px;
+  font-weight: 550;
+  color: var(--co-brand);
+}
+.co-start {
+  padding: 28px 26px;
+}
+.co-start p {
+  max-inline-size: 440px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--co-ink-2);
+}
+
+/* ---------- Option set editor ---------- */
+
+.co-edithead {
+  display: grid;
+  gap: 8px;
+  padding: 8px 2px 6px;
+}
+.co-edithead .co-heading {
+  overflow-wrap: anywhere;
+}
+.co-edithead__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--co-ink-2);
+}
+.co-editor {
+  --co-indent: 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  align-items: start;
+}
+.co-editor .co-stack {
+  gap: 14px;
+}
+.co-editcard {
+  padding: 20px 22px 22px;
+}
+/* "01  Details ........ 3 / 50", then a one-line hint. */
+.co-cardhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 10px;
+  margin-block-end: 16px;
+}
+.co-cardhead__num {
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--co-brand);
+}
+.co-cardhead h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--co-ink);
+}
+.co-cardhead__aside {
+  margin-inline-start: auto;
+  font-size: 11px;
+  color: var(--co-ink-3);
+}
+.co-cardhead p {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--co-ink-2);
+}
+
+/* Questions: white rows on the glass; follow-ups indent and carry a violet edge. */
+.co-qs {
+  display: grid;
+  gap: 8px;
+}
+.co-qs__item {
+  margin-inline-start: calc(var(--co-depth, 0) * var(--co-indent));
+}
+.co-q {
+  border: 1px solid var(--co-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  transition: border-color 0.2s ease, box-shadow 0.2s var(--co-ease), background 0.2s ease;
+}
+.co-q:hover {
+  border-color: rgba(30, 20, 60, 0.14);
+}
+.co-q.is-open {
+  border-color: rgba(91, 71, 224, 0.35);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--co-shadow);
+}
+.co-q--follow {
+  border-inline-start: 2px solid rgba(91, 71, 224, 0.45);
+}
+.co-q__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 8px 8px 10px;
+}
+.co-q__icon {
+  display: grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--co-line), 0 2px 6px -3px rgba(30, 20, 60, 0.2);
+}
+.co-q__title {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: start;
+  color: inherit;
+  cursor: pointer;
+}
+.co-q__title strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--co-ink);
+}
+.co-q__title small {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--co-ink-3);
+}
+.co-q__title:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid var(--co-brand);
+  outline-offset: 2px;
+}
+.co-q__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.co-q__body {
+  padding: 16px;
+  border-block-start: 1px solid var(--co-line);
+}
+/* Answer-type picker: a 3×3 grid of cards, each a miniature of what the customer sees. */
+.co-picker {
+  display: grid;
+  gap: 12px;
+  animation: co-rise 0.35s var(--co-ease) both;
+}
+.co-picker--more {
+  margin-block-start: 16px;
+  padding-block-start: 16px;
+  border-block-start: 1px solid var(--co-line);
+}
+.co-picker__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+button.co-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+.co-typegrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.co-type {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 6px 6px 12px;
+  border: 0;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 0 1px var(--co-line), 0 1px 2px rgba(30, 20, 60, 0.04);
+  font: inherit;
+  text-align: start;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.2s var(--co-ease), box-shadow 0.2s var(--co-ease), background 0.2s ease;
+}
+.co-type:hover {
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(91, 71, 224, 0.32), 0 16px 30px -20px rgba(30, 20, 60, 0.45);
+  transform: translateY(-2px);
+}
+.co-type__text {
+  display: grid;
+  gap: 2px;
+  padding-inline: 6px;
+}
+.co-type__text strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--co-ink);
+}
+.co-type__text small {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--co-ink-3);
+}
+.co-type:focus-visible,
+.co-addbtn:focus-visible,
+.co-segment input:focus-visible + span {
+  outline: 2px solid var(--co-brand);
+  outline-offset: 2px;
+}
+/* After the first question: one quiet full-width row that opens the picker. */
+.co-addbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  inline-size: 100%;
+  margin-block-start: 10px;
+  padding: 11px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 0 1px var(--co-line);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--co-ink-2);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.co-addbtn:hover {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(91, 71, 224, 0.32);
+  color: var(--co-ink);
+}
+.co-addbtn span {
+  display: grid;
+  place-items: center;
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: 50%;
+  background: var(--co-dark);
+  font-size: 13px;
+  line-height: 1;
+  color: #fff;
+}
+
+/* The miniatures: ink by default, violet while their card is hovered. */
+.co-art {
+  --co-accent: var(--co-dark);
+  display: grid;
+  place-items: center;
+  block-size: 66px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(236, 230, 255, 0.75), rgba(255, 236, 226, 0.65));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+}
+.co-type:hover .co-art {
+  --co-accent: var(--co-brand);
+}
+.co-art i {
+  display: block;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.co-art__field {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  inline-size: 74%;
+  block-size: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(30, 20, 60, 0.14), 0 3px 8px -6px rgba(30, 20, 60, 0.3);
+}
+.co-art__field--tall {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  block-size: 34px;
+}
+.co-art__field--stepper {
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--co-ink-3);
+}
+.co-art__field--stepper b:nth-child(2) {
+  font-weight: 600;
+  color: var(--co-ink);
+}
+.co-art__line {
+  block-size: 4px;
+  border-radius: 2px;
+  background: rgba(30, 20, 60, 0.16);
+}
+.co-art__caret {
+  inline-size: 1.5px;
+  block-size: 10px;
+  background: var(--co-accent);
+}
+.co-type:hover .co-art__caret {
+  animation: co-blink 1s steps(1) infinite;
+}
+.co-art__chev {
+  inline-size: 5px;
+  block-size: 5px;
+  margin-inline-start: auto;
+  border: solid var(--co-ink-2);
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-1.5px) rotate(45deg);
+}
+.co-art__cal {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, 6px);
+  gap: 3px;
+  padding: 11px 8px 8px;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(30, 20, 60, 0.14), 0 3px 8px -6px rgba(30, 20, 60, 0.3);
+}
+.co-art__cal::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  block-size: 4px;
+  border-radius: 5px 5px 0 0;
+  background: rgba(30, 20, 60, 0.1);
+}
+.co-art__cal i {
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 1.5px;
+  background: rgba(30, 20, 60, 0.14);
+}
+.co-art__cal i.is-on {
+  background: var(--co-accent);
+}
+.co-art__row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.co-art__pill {
+  inline-size: 24px;
+  block-size: 15px;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(30, 20, 60, 0.16);
+}
+.co-art__pill.is-on {
+  background: var(--co-accent);
+  box-shadow: none;
+}
+.co-art__dot {
+  inline-size: 16px;
+  block-size: 16px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.co-art__dot.is-on {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12), 0 0 0 2px #fff, 0 0 0 3.5px var(--co-accent);
+}
+.co-art__list {
+  display: grid;
+  gap: 7px;
+  inline-size: 60%;
+}
+.co-art__list > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.co-art__box {
+  position: relative;
+  flex: none;
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(30, 20, 60, 0.22);
+}
+.co-art__box.is-on {
+  background: var(--co-accent);
+  box-shadow: none;
+}
+.co-art__box.is-on::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 3.5px;
+  inset-block-start: 1.5px;
+  inline-size: 2px;
+  block-size: 5px;
+  border: solid #fff;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+@keyframes co-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Products */
+.co-rows {
+  margin: 0 0 14px;
+  padding: 2px 4px;
+  list-style: none;
+  border: 1px solid var(--co-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.65);
+}
+.co-product {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 4px;
+  font-size: 12.5px;
+  color: var(--co-ink);
+}
+.co-product + .co-product {
+  border-block-start: 1px solid var(--co-line);
+}
+.co-product > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.co-placeholder {
+  margin-block-end: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 0 1px var(--co-line);
+}
+.co-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.co-actions--end {
+  justify-content: flex-end;
+}
+
+/* Status: a two-way segmented control on native radios, dots matching .co-state. */
+.co-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(30, 20, 60, 0.06);
+}
+.co-segment label {
+  position: relative;
+}
+.co-segment input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.co-segment span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--co-ink-2);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.co-segment span::before {
+  content: "";
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.3;
+}
+.co-segment input:checked + span {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(30, 20, 60, 0.08), 0 4px 10px -6px rgba(30, 20, 60, 0.3);
+  color: var(--co-ink);
+}
+.co-segment input[value="ACTIVE"]:checked + span::before {
+  background: #2fb36a;
+  box-shadow: 0 0 0 3px rgba(47, 179, 106, 0.18);
+  opacity: 1;
+}
+.co-segment input[value="DRAFT"]:checked + span::before {
+  background: #e8a317;
+  opacity: 1;
+}
+
+@media (max-width: 900px) {
+  .co-editor {
+    grid-template-columns: 1fr;
+  }
+}
+/* Phones: list rows stack (name, then status and numbers); the editor tightens up. */
+@media (max-width: 680px) {
+  .co-sets__head {
+    display: none;
+  }
+  .co-set {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    gap: 8px 12px;
+  }
+  .co-set__main {
+    grid-column: 1 / -1;
+  }
+  .co-set__arrow {
+    display: none;
+  }
+  .co-display {
+    font-size: 32px;
+  }
+  .co-editor {
+    --co-indent: 12px;
+  }
+  .co-editcard {
+    padding: 16px;
+  }
+  .co-q__body {
+    padding: 14px 12px;
+  }
+  .co-typegrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ---------- Editor live preview ---------- */
 
 .co-device {
@@ -1208,8 +1869,19 @@ textarea {
   .co-template,
   .co-template__cta,
   .co-template__cover img,
-  .co-btn {
+  .co-btn,
+  .co-set,
+  .co-set__arrow,
+  .co-q,
+  .co-type,
+  .co-addbtn,
+  .co-art i,
+  .co-segment span {
     transition: none;
+  }
+  .co-picker,
+  .co-type:hover .co-art__caret {
+    animation: none;
   }
 }
 /* Without blur support, keep glass readable with a more opaque fill. */

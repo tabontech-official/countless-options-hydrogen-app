@@ -13,15 +13,15 @@
 // charged. Pricing rules live in extensions/product-options-pricing/src/pricing.js.
 //hello
 export const FIELD_TYPES = {
-  text: { label: "Text box", icon: "text", placeholder: true, maxLength: true },
-  textarea: { label: "Paragraph", icon: "text-block", placeholder: true, maxLength: true },
-  number: { label: "Number", icon: "hashtag", placeholder: true },
-  date: { label: "Date", icon: "calendar" },
-  select: { label: "Dropdown", icon: "select", choices: true },
-  radio: { label: "Buttons", icon: "button", choices: true },
-  swatch: { label: "Color swatch", icon: "color", choices: true },
-  checkboxes: { label: "Checkboxes", icon: "list-bulleted", choices: true },
-  checkbox: { label: "Single checkbox", icon: "checkbox" },
+  text: { label: "Text box", hint: "A short answer, like a name", icon: "text", placeholder: true, maxLength: true },
+  textarea: { label: "Paragraph", hint: "A longer note or message", icon: "text-block", placeholder: true, maxLength: true },
+  number: { label: "Number", hint: "A quantity or a measurement", icon: "hashtag", placeholder: true },
+  date: { label: "Date", hint: "A delivery or event date", icon: "calendar" },
+  select: { label: "Dropdown", hint: "One pick from a list", icon: "select", choices: true },
+  radio: { label: "Buttons", hint: "One pick, side by side", icon: "button", choices: true },
+  swatch: { label: "Color swatch", hint: "One pick from colors", icon: "color", choices: true },
+  checkboxes: { label: "Checkboxes", hint: "Any number of picks", icon: "list-bulleted", choices: true },
+  checkbox: { label: "Single checkbox", hint: "A yes-or-no add-on", icon: "checkbox" },
 };
 
 export const MAX_FIELDS = 50;
