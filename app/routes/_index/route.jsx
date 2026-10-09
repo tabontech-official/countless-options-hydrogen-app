@@ -1,7 +1,6 @@
 import { redirect, useActionData } from "react-router";
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "../auth.login/error.server";
-import { FIELD_TYPES, MAX_FIELDS } from "../../options";
 import { TEMPLATES } from "../../templates";
 import { Brand } from "../../components/Brand";
 import { Capabilities } from "../../components/Capabilities";
@@ -38,14 +37,6 @@ const SECTIONS = [
   ["how", "How it works"],
   ["templates", "Templates"],
   ["faq", "FAQ"],
-];
-
-// Every number comes from the app itself, so the page can't drift from what it does.
-const FACTS = [
-  [Object.keys(FIELD_TYPES).length, "field types"],
-  [TEMPLATES.length, "ready-made templates"],
-  [MAX_FIELDS, "questions per option set"],
-  [0, "lines of theme code"],
 ];
 
 const STEPS = [
@@ -142,15 +133,6 @@ export default function Landing() {
               <b className="co-mono co-up">+$10.00</b>
             </span>
           </div>
-        </section>
-
-        <section className={`co-glass ${styles.facts}`} aria-label="At a glance">
-          {FACTS.map(([value, label]) => (
-            <div key={label}>
-              <strong className="co-mono">{value}</strong>
-              <span>{label}</span>
-            </div>
-          ))}
         </section>
 
         <section id="features" className={styles.section}>
