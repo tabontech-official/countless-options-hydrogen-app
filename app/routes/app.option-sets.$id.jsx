@@ -8,17 +8,19 @@ import { FIELD_TYPES, MAX_FIELDS, MAX_PRICE, MAX_PRODUCTS, answersOf, hasPrices,
 import { ensurePricing, getProducts, getShopCurrency, syncProducts } from "../options.server";
 import { StatusBadge, plural } from "../components/OptionSetsTable";
 
-async function findSet(shop, id) {
+// A set that's gone (deleted, a second Delete click, Back after deleting, another tab)
+// sends the merchant to the list instead of an error page.
+async function findSet(shop, id, redirect) {
   if (id === "new") return null;
   // Scoped by shop so one store can never read or edit another store's set.
   const set = await prisma.optionSet.findFirst({ where: { id, shop }, include: { products: true } });
-  if (!set) throw new Response("Option set not found", { status: 404 });
+  if (!set) throw redirect("/app/option-sets");
   return set;
 }
 
 export const loader = async ({ request, params }) => {
-  const { admin, session } = await authenticate.admin(request);
-  const set = await findSet(session.shop, params.id);
+  const { admin, session, redirect } = await authenticate.admin(request);
+  const set = await findSet(session.shop, params.id, redirect);
   const search = new URL(request.url).searchParams;
   const unsynced = search.has("unsynced");
   // Set when a template was just copied into this store (see app.templates.jsx).
@@ -64,7 +66,7 @@ export const loader = async ({ request, params }) => {
 export const action = async ({ request, params }) => {
   const { admin, session, redirect } = await authenticate.admin(request);
   const { shop } = session;
-  const existing = await findSet(shop, params.id);
+  const existing = await findSet(shop, params.id, redirect);
   const before = existing?.products.map((p) => p.productId) ?? [];
   const body = await request.json();
 
@@ -167,6 +169,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
   const isNew = !set.id;
   const dirty = snapshot(draft) !== snapshot(initial);
   const saving = navigation.state === "submitting";
+  const deleting = navigation.state !== "idle" && navigation.json?.intent === "delete";
   const errors = clientErrors.length ? clientErrors : serverErrors;
 
   const update = (patch) => setDraft((d) => ({ ...d, ...patch }));
@@ -491,7 +494,14 @@ function Editor({ set, currency, serverErrors, unsynced }) {
         <s-paragraph>
           {`"${set.name}" will be removed from ${plural(set.products.length, "product")}. This can't be undone.`}
         </s-paragraph>
-        <s-button slot="primary-action" variant="primary" tone="critical" onClick={() => post({ intent: "delete" })}>
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          tone="critical"
+          loading={deleting ? "" : undefined}
+          disabled={deleting}
+          onClick={() => post({ intent: "delete" })}
+        >
           Delete
         </s-button>
         <s-button slot="secondary-actions" commandFor="delete-modal" command="--hide">

@@ -52,40 +52,37 @@ export default function OptionSets() {
         </header>
 
         {sets.length ? (
-          <>
-            <div className="co-toolbar">
-              <div className="co-pills" role="tablist" aria-label="Status">
-                {STATUSES.map((s) => (
-                  <button
-                    key={s.value}
-                    type="button"
-                    role="tab"
-                    aria-selected={status === s.value}
-                    className="co-pill"
-                    onClick={() => setStatus(s.value)}
-                  >
-                    {s.label}
-                    <span className="co-pill__count co-mono">{count(s.value)}</span>
-                  </button>
-                ))}
-              </div>
-              <s-search-field
-                label="Search option sets"
-                labelAccessibilityVisibility="exclusive"
-                placeholder="Search by name or question"
-                value={query}
-                onInput={(e) => setQuery(e.currentTarget.value)}
-              />
-            </div>
-            {shown.length ? (
-              <OptionSetsTable sets={shown} />
-            ) : (
-              <div className="co-card co-empty">
-                <s-icon type="search" tone="neutral" />
-                No option sets match. Try a different search or status.
-              </div>
-            )}
-          </>
+          <OptionSetsTable
+            sets={shown}
+            toolbar={
+              <>
+                <div className="co-tabs" role="tablist" aria-label="Status">
+                  {STATUSES.map((s) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={status === s.value}
+                      className="co-tab"
+                      onClick={() => setStatus(s.value)}
+                    >
+                      {s.label}
+                      <span>{count(s.value)}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="co-table__search">
+                  <s-search-field
+                    label="Search option sets"
+                    labelAccessibilityVisibility="exclusive"
+                    placeholder="Search by name or question"
+                    value={query}
+                    onInput={(e) => setQuery(e.currentTarget.value)}
+                  />
+                </div>
+              </>
+            }
+          />
         ) : (
           <EmptyState />
         )}
