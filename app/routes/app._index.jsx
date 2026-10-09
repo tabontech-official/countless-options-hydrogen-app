@@ -120,7 +120,8 @@ export default function Dashboard() {
         {data.supportEmail && (
           <footer className="co-foot">
             <span>Stuck on setup? We can review your option set and theme placement.</span>
-            <a className="co-link" href={`mailto:${data.supportEmail}`}>
+            {/* _blank: the admin's frame blocks navigating itself to mailto:. */}
+            <a className="co-link" href={`mailto:${data.supportEmail}`} target="_blank" rel="noreferrer">
               Contact support
             </a>
           </footer>

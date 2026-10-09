@@ -24,6 +24,7 @@ export default function App() {
         </s-link>
         <s-link href="/app/option-sets">Option sets</s-link>
         <s-link href="/app/templates">Templates</s-link>
+        <s-link href="/app/help">Help</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>
