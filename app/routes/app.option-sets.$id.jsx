@@ -227,7 +227,6 @@ function Editor({ set, currency, serverErrors, unsynced }) {
     setPicking(false);
   };
 
-  const moveField = (index, direction) => setFields((fs) => moved(fs, index, direction) ?? fs);
 
   // Drag and drop reuses the up/down steps, so follow-ups keep moving with their parent.
   const [dragId, setDragId] = useState(null);
@@ -401,9 +400,6 @@ function Editor({ set, currency, serverErrors, unsynced }) {
                         onToggle={() => setOpenId(openId === field.id ? null : field.id)}
                         onChange={(patch) => updateField(field.id, patch)}
                         onChangeType={(type) => changeType(field, type)}
-                        canMoveUp={Boolean(moved(draft.fields, index, -1))}
-                        canMoveDown={Boolean(moved(draft.fields, index, 1))}
-                        onMove={(direction) => moveField(index, direction)}
                         onDuplicate={() => duplicateField(index)}
                         onAddFollowUp={() => addFollowUp(field)}
                         onRemove={() =>
@@ -1185,7 +1181,7 @@ function placeAfterGroup(fields, id, anchorId) {
   return [...rest.slice(0, at), ...fields.slice(index, end), ...rest.slice(at)];
 }
 
-function FieldCard({ field, fields, formatMoney, followUp, open, canMoveUp, canMoveDown, onToggle, onChange, onChangeType, onMove, onDuplicate, onAddFollowUp, onRemove, onDragStart, onDragEnd }) {
+function FieldCard({ field, fields, formatMoney, followUp, open, onToggle, onChange, onChangeType, onDuplicate, onAddFollowUp, onRemove, onDragStart, onDragEnd }) {
   const spec = FIELD_TYPES[field.type];
   const parent = field.condition && fields.find((f) => f.id === field.condition.fieldId);
   const per = field.per && fields.find((f) => f.id === field.per);
@@ -1215,8 +1211,6 @@ function FieldCard({ field, fields, formatMoney, followUp, open, canMoveUp, canM
           <small>{summary}</small>
         </button>
         <span className="co-q__actions">
-          <s-button variant="tertiary" icon="arrow-up" accessibilityLabel="Move up" disabled={!canMoveUp} onClick={() => onMove(-1)} />
-          <s-button variant="tertiary" icon="arrow-down" accessibilityLabel="Move down" disabled={!canMoveDown} onClick={() => onMove(1)} />
           <s-button variant="tertiary" icon="menu-vertical" accessibilityLabel="More actions" commandFor={menuId} />
           <s-menu id={menuId} accessibilityLabel="Field actions">
             {answersOf(field).length > 0 && (
