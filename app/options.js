@@ -333,6 +333,10 @@ export function validateOptionSet(input) {
         })
         .filter((c) => c.label && !seen.has(c.label.toLowerCase()) && seen.add(c.label.toLowerCase()));
       if (!field.choices.length) fail(`${ref} needs at least one choice.`, at("choices"));
+      // One choice selected when the page opens (single-choice questions only). A default that's
+      // no longer a choice (renamed, removed) is dropped, so the customer chooses again.
+      const preset = typeof f?.default === "string" ? f.default.trim() : "";
+      if (type !== "checkboxes" && preset && field.choices.some((c) => c.label === preset)) field.default = preset;
       if (field.choices.some((c) => c.color === "")) fail(`${ref} has a swatch without a valid color.`, at("choices"));
     } else {
       const price = money(f?.price);

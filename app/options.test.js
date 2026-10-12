@@ -58,6 +58,14 @@ test("reports merchant-readable errors", () => {
   assert.deepEqual(validateOptionSet({}).errors, ["Give this option set a name.", "Add at least one question."]);
 });
 
+test("a single-choice question can open with a choice selected", () => {
+  const pick = (over) => validateOptionSet({ name: "Set", fields: [field({ type: "select", label: "Size", choices: [{ label: "S" }, { label: "M" }], ...over })] }).data.fields[0].default;
+  assert.equal(pick({ default: " M " }), "M");
+  assert.equal(pick({ default: "XL" }), undefined, "only one of its choices");
+  assert.equal(pick({ type: "checkboxes", default: "M" }), undefined, "not for checkboxes");
+  assert.equal(pick({}), undefined);
+});
+
 test("says which question and box each error belongs to", () => {
   const { issues } = validateOptionSet({ name: "", fields: [field({ id: "a", type: "file", label: "" }), field({ id: "b", type: "select", label: "Pick", choices: [] })] });
   assert.deepEqual(

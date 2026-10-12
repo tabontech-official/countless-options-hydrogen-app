@@ -2266,6 +2266,11 @@ button.co-link {
 .co-choice__grip { height:28px; padding:0; border:0; background:none; }
 .co-choice__grip:focus-visible { outline:2px solid var(--co-brand); outline-offset:1px; }
 .co-choice { position:relative; border-radius:10px; transition:opacity .15s ease; }
+/* "Default" column: a quiet heading over one radio per choice (click again to clear). */
+.co-choicehead { justify-self:center; font-size:11.5px; font-weight:500; color:var(--co-ink-3); }
+.co-default { display:grid; place-items:center; }
+.co-default input { inline-size:16px; block-size:16px; margin:0; accent-color:var(--co-dark); cursor:pointer; }
+.co-default input:disabled { cursor:default; opacity:.4; }
 .co-choice.is-dragging { opacity:.45; }
 .co-choice.is-drop-before::before,
 .co-choice.is-drop-after::after { content:""; position:absolute; inset-inline:0; block-size:2px; border-radius:2px; background:var(--co-brand); }

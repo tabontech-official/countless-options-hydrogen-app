@@ -1618,8 +1618,20 @@ function FieldSettings({ field, issues, candidates, numberFields, onChange, onCh
 function ChoicesEditor({ field, onChange }) {
   const swatch = field.type === "swatch";
   const [stepsOpen, setStepsOpen] = useState(false);
-  const setChoice = (i, patch) => onChange({ choices: field.choices.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
-  const columns = ["auto", swatch && "9rem", "1fr", field.priced && "8rem", "auto"].filter(Boolean).join(" ");
+  const setChoice = (i, patch) =>
+    onChange({
+      choices: field.choices.map((c, j) => (j === i ? { ...c, ...patch } : c)),
+      // Renaming the default choice keeps it the default.
+      ...("label" in patch && field.default === field.choices[i].label && { default: patch.label }),
+    });
+  const removeChoice = (i) =>
+    onChange({
+      choices: field.choices.filter((_, j) => j !== i),
+      ...(field.default === field.choices[i].label && { default: null }),
+    });
+  // Single-choice questions can open with one choice selected: a "Default" radio per row.
+  const hasDefault = field.type !== "checkboxes";
+  const columns = ["22px", swatch && "9rem", "1fr", field.priced && "8rem", hasDefault && "3.5rem", "2.25rem"].filter(Boolean).join(" ");
 
   // Reorder by dragging the handle, or with the arrow keys on it. A choice keeps its price.
   const [dragFrom, setDragFrom] = useState(null);
@@ -1638,7 +1650,14 @@ function ChoicesEditor({ field, onChange }) {
   return (
     <div className="co-choices">
     <s-stack gap="small-300">
-      <s-text type="strong">Choices</s-text>
+      <s-grid gridTemplateColumns={columns} gap="small-300" alignItems="end">
+        <span />
+        {swatch && <span />}
+        <s-text type="strong">Choices</s-text>
+        {field.priced && <span />}
+        {hasDefault && <span className="co-choicehead">Default</span>}
+        <span />
+      </s-grid>
       {field.choices.map((choice, i) => (
         // Index keys are fine: every input is controlled, so values follow the array.
         <div
@@ -1709,12 +1728,26 @@ function ChoicesEditor({ field, onChange }) {
               onInput={(e) => setChoice(i, { price: e.currentTarget.value })}
             />
           )}
+          {hasDefault && (
+            <span className="co-default">
+              <input
+                type="radio"
+                name={`default-${field.id}`}
+                checked={Boolean(choice.label) && choice.label === field.default}
+                disabled={!choice.label.trim()}
+                aria-label={`Selected by default: ${choice.label || `choice ${i + 1}`}`}
+                // A radio can't be unticked, so clicking the default again clears it.
+                onClick={() => onChange({ default: field.default === choice.label ? null : choice.label })}
+                onChange={() => {}}
+              />
+            </span>
+          )}
           <s-button
             variant="tertiary"
             icon="delete"
             accessibilityLabel={`Remove choice ${i + 1}`}
             disabled={field.choices.length === 1}
-            onClick={() => onChange({ choices: field.choices.filter((_, j) => j !== i) })}
+            onClick={() => removeChoice(i)}
           />
         </s-grid>
         </div>
@@ -1833,7 +1866,7 @@ function PreviewField({ field, fields, formatMoney }) {
       return <s-date-field {...common} />;
     case "select":
       return (
-        <s-select {...common} placeholder="Choose an option">
+        <s-select {...common} placeholder="Choose an option" value={field.default ?? ""}>
           {choices.map((c) => (
             <s-option key={c.label} value={c.label}>
               {c.label + plus(c.price)}
@@ -1846,7 +1879,7 @@ function PreviewField({ field, fields, formatMoney }) {
       return (
         <s-choice-list {...common} multiple={field.type === "checkboxes"}>
           {choices.map((c) => (
-            <s-choice key={c.label} value={c.label}>
+            <s-choice key={c.label} value={c.label} selected={c.label === field.default}>
               {c.label + plus(c.price)}
             </s-choice>
           ))}

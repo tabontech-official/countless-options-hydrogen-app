@@ -69,7 +69,7 @@
                       <span>{{ c.label | escape }}{% if c.price %}<span class="po__price" data-po-amount="{{ c.price }}"></span>{% endif %}</span>
                     </label>
                   {%- else -%}
-                    <input class="po__sr" type="radio" id="{{ cid }}" name="{{ fid }}" value="{{ c.label | escape }}" {% if c.price %}data-po-price="{{ c.price }}"{% endif %} {% if f.required %}required{% endif %}>
+                    <input class="po__sr" type="radio" id="{{ cid }}" name="{{ fid }}" value="{{ c.label | escape }}" {% if c.price %}data-po-price="{{ c.price }}"{% endif %} {% if f.required %}required{% endif %} {% if c.label == f.default %}checked{% endif %}>
                     {%- if f.type == 'swatch' -%}
                       <label class="po__swatch" for="{{ cid }}" title="{{ c.label | escape }}" style="--po-swatch: {{ c.color | escape }}">
                         <span class="po__sr">{{ c.label | escape }}</span>
@@ -102,7 +102,7 @@
                 <select class="po__input" id="{{ fid }}" {{ attrs }}>
                   <option value="">{{ 'product_options.choose' | t }}</option>
                   {%- for c in f.choices -%}
-                    <option value="{{ c.label | escape }}" {% if c.price %}data-po-price="{{ c.price }}"{% endif %}>{{ c.label | escape }}</option>
+                    <option value="{{ c.label | escape }}" {% if c.price %}data-po-price="{{ c.price }}"{% endif %} {% if c.label == f.default %}selected{% endif %}>{{ c.label | escape }}</option>
                   {%- endfor -%}
                 </select>
               {%- when 'number' -%}
