@@ -240,6 +240,15 @@ async function linkAddon(admin, transform, variantId) {
   }
 }
 
+// Everything the app stores for a shop: option sets (their product links go with them, onDelete
+// Cascade) and sessions. One transaction, so an erase never stops halfway.
+// Data in the merchant's own store stays theirs: uploaded files (they're attached to orders) and
+// the "Option add-ons" product, which Shopify no longer lets the app touch once uninstalled.
+export async function eraseShopData(shop) {
+  await prisma.$transaction([prisma.optionSet.deleteMany({ where: { shop } }), prisma.session.deleteMany({ where: { shop } })]);
+  pricingChecked.delete(shop);
+}
+
 // Option prices are only charged while the cart transform exists, and Shopify deletes it when the
 // app is uninstalled. Called when the admin opens, so a reinstall (or any other loss) repairs
 // itself instead of checkout quietly charging the bare product price.
