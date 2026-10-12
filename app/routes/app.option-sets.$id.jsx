@@ -23,7 +23,8 @@ import {
   newChoice,
   newField,
   rulesOf,
-  rulesQuery,
+  rulesSearch,
+  METAFIELD_TYPES,
   validateOptionSet,
 } from "../options";
 import { ensurePricing, getProducts, getShopCurrency, ruleMatches, syncProducts } from "../options.server";
@@ -218,7 +219,9 @@ function Editor({ set, currency, serverIssues, unsynced }) {
   useEffect(() => {
     if (!jump) return;
     const card = { name: "01", fields: "02", products: "03" }[jump.input] ?? "01";
-    const target = document.getElementById(jump.fieldId ? `co-q-${jump.fieldId}` : `co-card-${card}`);
+    const target =
+      document.getElementById(jump.fieldId ? `co-q-${jump.fieldId}` : jump.condition != null ? `co-rule-${jump.condition}` : "") ??
+      document.getElementById(`co-card-${card}`);
     target?.scrollIntoView({ behavior: "smooth", block: "center" });
     if (jump.input === "label" || jump.input === "name") target?.querySelector("s-text-field")?.focus?.();
   }, [jump]);
@@ -253,11 +256,14 @@ function Editor({ set, currency, serverIssues, unsynced }) {
   // Drag and drop reuses the up/down steps, so follow-ups keep moving with their parent.
   const [dragId, setDragId] = useState(null);
   const dropOn = (targetId) => {
+    // Only a dragged question moves; other drops (a choice, a file) reach here by bubbling.
+    if (!dragId) return;
     setFields((fs) => {
       let cur = fs;
       for (let guard = fs.length; guard > 0; guard--) {
         const i = cur.findIndex((f) => f.id === dragId);
         const t = cur.findIndex((f) => f.id === targetId);
+        if (i < 0 || t < 0) break;
         const dir = Math.sign(t - i);
         const next = dir && moved(cur, i, dir);
         if (!next) break;
@@ -508,7 +514,21 @@ function Editor({ set, currency, serverIssues, unsynced }) {
                   </label>
                 ))}
               </div>
-              {draft.rules.mode === "match" && <RulesEditor rules={draft.rules} onChange={(rules) => update({ rules })} />}
+              {/* Problems with the whole section; a condition's own problem shows under its row. */}
+              {issues
+                .filter((i) => i.input === "products" && i.condition == null)
+                .map((issue) => (
+                  <s-text key={issue.message} tone="critical">
+                    {issue.message}
+                  </s-text>
+                ))}
+              {draft.rules.mode === "match" && (
+                <RulesEditor
+                  rules={draft.rules}
+                  issues={issues.filter((i) => i.input === "products" && i.condition != null)}
+                  onChange={(rules) => update({ rules })}
+                />
+              )}
               {draft.rules.mode === "all" && (
                 <MatchCount
                   rules={draft.rules}
@@ -707,11 +727,14 @@ function TypeArt({ type }) {
 
 const VALUE_HINTS = { tag: "e.g. engraving", vendor: "e.g. Acme Jewelry", type: "e.g. Rings" };
 const VALUE_NOUNS = { tag: "tag", vendor: "vendor", type: "product type" };
+// Metafield kinds typed as text (with suggestions), and an example of each type's format.
+const TYPED_KINDS = new Set(["text"]);
+const METAFIELD_HINTS = { url: "https://…", "list.url": "https://…", color: "#1a1a1a", "list.color": "#1a1a1a", date: "YYYY-MM-DD", "list.date": "YYYY-MM-DD" };
 
 // A text field that lists the store's matching values while typing, with "Add" for a new one,
 // like the tag field in Shopify's admin. A new tag needs nothing more: products tagged with
 // it later get the questions.
-function SuggestField({ label, placeholder, value, options, noun, onChange }) {
+function SuggestField({ label, placeholder, value, options, noun, error, onChange }) {
   const [open, setOpen] = useState(false);
   const typed = value.trim();
   const needle = typed.toLowerCase();
@@ -735,6 +758,7 @@ function SuggestField({ label, placeholder, value, options, noun, onChange }) {
         labelAccessibilityVisibility="exclusive"
         placeholder={placeholder}
         value={value}
+        error={error}
         onInput={(e) => {
           onChange(e.currentTarget.value);
           setOpen(true);
@@ -763,11 +787,12 @@ function SuggestField({ label, placeholder, value, options, noun, onChange }) {
 // Conditions like Shopify's own product filters: "Tag is engraving", "Catalog is Region: Europe".
 // A tag doesn't have to exist yet; products that match later get the questions automatically
 // (webhooks.products.update.jsx, webhooks.collections.update.jsx).
-function RulesEditor({ rules, onChange }) {
+function RulesEditor({ rules, issues, onChange }) {
   const shopify = useAppBridge();
   const suggestions = useFetcher();
   const channels = useFetcher();
   const catalogs = useFetcher();
+  const metafields = useFetcher();
   // Tags, vendors and types to suggest while typing; loaded once for all rows.
   useEffect(() => {
     suggestions.load("/app/rule-values?kind=suggest");
@@ -813,6 +838,28 @@ function RulesEditor({ rules, onChange }) {
   // Channel and catalog lists load the first time a condition needs them.
   const needsChannels = rules.conditions.some((c) => c.field === "channel");
   const needsCatalogs = rules.conditions.some((c) => c.field === "catalog");
+  const needsMetafields = rules.conditions.some((c) => c.field === "metafield");
+  useEffect(() => {
+    if (needsMetafields && !metafields.data) metafields.load("/app/rule-values?kind=metafield");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsMetafields]);
+  // Values products already have in the text-like metafields the rows check, for suggestions.
+  const values = useFetcher();
+  const valueKeys = [
+    ...new Set(rules.conditions.filter((c) => c.field === "metafield" && c.key && TYPED_KINDS.has(METAFIELD_TYPES[c.type])).map((c) => c.key)),
+  ]
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (valueKeys) values.load(`/app/rule-values?kind=values&keys=${encodeURIComponent(valueKeys)}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueKeys]);
+  const valuesOf = (key) => (values.data?.keys === valueKeys ? values.data.values[key] : undefined);
+  // The short fix for a row ("Choose a collection"), shown on the field itself.
+  const errorOf = (i) => issues.find((x) => x.condition === i)?.fix;
+
+  // Metafields Shopify's search can filter on (admin filtering on); others are matched on save.
+  const searchable = new Set((metafields.data?.options ?? []).filter((o) => o.searchable).map((o) => o.value));
   useEffect(() => {
     if (needsChannels && !channels.data) channels.load("/app/rule-values?kind=channel");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -830,10 +877,11 @@ function RulesEditor({ rules, onChange }) {
 
   const valueControl = (c, i) => {
     const label = `Condition ${i + 1}: value`;
+    const error = errorOf(i);
     switch (c.field) {
       case "status":
         return (
-          <s-select label={label} labelAccessibilityVisibility="exclusive" value={c.value} onChange={(e) => setCondition(i, { value: e.currentTarget.value })}>
+          <s-select label={label} labelAccessibilityVisibility="exclusive" value={c.value} error={error} onChange={(e) => setCondition(i, { value: e.currentTarget.value })}>
             {Object.entries(PRODUCT_STATUSES).map(([value, name]) => (
               <s-option key={value} value={value}>
                 {name}
@@ -859,6 +907,7 @@ function RulesEditor({ rules, onChange }) {
             label={label}
             options={channels.data?.options}
             value={c.value}
+            error={error}
             placeholder="Choose a sales channel"
             onPick={(o) => setCondition(i, { value: o.value, label: o.label })}
           />
@@ -883,11 +932,74 @@ function RulesEditor({ rules, onChange }) {
               label={label}
               options={catalogs.data?.options.filter((o) => o.kind === c.kind)}
               value={c.value}
+              error={error}
               placeholder="Choose a catalog"
               onPick={(o) => setCondition(i, { value: o.value, label: o.label })}
             />
           </s-grid>
         );
+      case "metafield": {
+        // First the metafield, then a value that fits its type, like Shopify's own filters.
+        const kind = METAFIELD_TYPES[c.type];
+        const choices = metafields.data?.options.find((o) => o.value === c.key)?.choices;
+        const setValue = (value) => setCondition(i, { value });
+        return (
+          <s-grid gridTemplateColumns="1fr 1fr" gap="small-300">
+            <ListSelect
+              label={`Condition ${i + 1}: metafield`}
+              options={metafields.data?.options}
+              value={c.key}
+              error={!c.key ? error : undefined}
+              placeholder="Choose a metafield"
+              empty="No product metafields"
+              onPick={(o) => setCondition(i, { key: o.value, label: o.label, type: o.type, value: METAFIELD_TYPES[o.type] === "boolean" ? "true" : "" })}
+            />
+            {kind === "entry" ? (
+              <EntrySelect
+                label={label}
+                definition={metafields.data?.options.find((o) => o.value === c.key)?.source}
+                value={c.value}
+                error={c.key ? error : undefined}
+                onPick={(o) => setCondition(i, { value: o.value, valueLabel: o.label })}
+              />
+            ) : kind === "boolean" ? (
+              <s-select label={label} labelAccessibilityVisibility="exclusive" value={c.value} onChange={(e) => setValue(e.currentTarget.value)}>
+                <s-option value="true">True</s-option>
+                <s-option value="false">False</s-option>
+              </s-select>
+            ) : choices ? (
+              <ListSelect
+                label={label}
+                options={choices.map((v) => ({ value: v, label: v }))}
+                value={c.value}
+                error={c.key ? error : undefined}
+                placeholder="Choose a value"
+                onPick={(o) => setValue(o.value)}
+              />
+            ) : kind === "number" || !c.key ? (
+              <s-text-field
+                label={label}
+                labelAccessibilityVisibility="exclusive"
+                value={c.value}
+                placeholder={kind === "number" ? "e.g. 10" : "Value"}
+                error={c.key ? error : undefined}
+                disabled={!c.key}
+                onInput={(e) => setValue(e.currentTarget.value)}
+              />
+            ) : (
+              <SuggestField
+                label={label}
+                placeholder={METAFIELD_HINTS[c.type] ?? "Text saved on products"}
+                value={c.value}
+                options={valuesOf(c.key)}
+                noun="value"
+                error={error}
+                onChange={setValue}
+              />
+            )}
+          </s-grid>
+        );
+      }
       default:
         return (
           <SuggestField
@@ -896,6 +1008,7 @@ function RulesEditor({ rules, onChange }) {
             value={c.value}
             options={suggestions.data?.[c.field]}
             noun={VALUE_NOUNS[c.field]}
+            error={error}
             onChange={(value) => setCondition(i, { value })}
           />
         );
@@ -922,8 +1035,8 @@ function RulesEditor({ rules, onChange }) {
           )}
           {rules.conditions.map((c, i) => (
             // Index keys are fine: every input is controlled, so values follow the array.
-            <div key={i} className="co-rule">
-              <s-grid gridTemplateColumns="@container (inline-size > 560px) 9rem 7rem 1fr auto, 1fr 1fr" gap="small-300" alignItems="center">
+            <div key={i} id={`co-rule-${i}`} className="co-rule">
+              <s-grid gridTemplateColumns="@container (inline-size > 560px) 9rem 7rem 1fr auto, 1fr 1fr" gap="small-300" alignItems="start">
                 <s-select
                   label={`Condition ${i + 1}: what to check`}
                   labelAccessibilityVisibility="exclusive"
@@ -958,6 +1071,22 @@ function RulesEditor({ rules, onChange }) {
                   onClick={() => onChange({ ...rules, conditions: rules.conditions.filter((_, j) => j !== i) })}
                 />
               </s-grid>
+              {c.field === "metafield" && metafields.data && !metafields.data.options.some((o) => !o.disabled) && (
+                <div className="co-newtag">
+                  <span>
+                    {metafields.data.options.length
+                      ? "None of your product metafields can be used yet: conditions work with text, number, true or false, date, color, URL and category value (like Color) metafields."
+                      : "This store has no product metafield definitions. Add one in Settings → Custom data → Products; metafields without a definition can't be used in conditions."}
+                  </span>
+                </div>
+              )}
+              {/* Category and collection are buttons, which can't show an error of their own. */}
+              {["category", "collection"].includes(c.field) && errorOf(i) && <s-text tone="critical">{errorOf(i)}</s-text>}
+              {c.field === "metafield" && c.key && valuesOf(c.key)?.length === 0 && (
+                <div className="co-newtag">
+                  <span>{`No product has a “${c.label}” value yet. Add one on a product page under Metafields, then type the same text here.`}</span>
+                </div>
+              )}
               {isNewTag(c) && (
                 <div className="co-newtag">
                   <span>{`No product has “${c.value.trim()}” yet. Tags exist once a product has them.`}</span>
@@ -980,6 +1109,7 @@ function RulesEditor({ rules, onChange }) {
           </s-stack>
           <MatchCount
             rules={rules}
+            searchable={searchable}
             refresh={tagged}
             title={(n) => (n ? `${plural(n, "product")} ${n === 1 ? "matches" : "match"} today` : "No products match yet")}
             note={
@@ -1002,25 +1132,47 @@ function RulesEditor({ rules, onChange }) {
 }
 
 // A select over options loaded from Shopify, with a placeholder until one is chosen.
-function ListSelect({ label, options, value, placeholder, onPick }) {
+function ListSelect({ label, options, value, placeholder, empty = "None in your store yet", error, onPick }) {
   return (
     <s-select
       label={label}
       labelAccessibilityVisibility="exclusive"
       value={value}
+      error={error}
       disabled={!options}
-      placeholder={!options ? "Loading…" : options.length ? placeholder : "None in your store yet"}
+      placeholder={!options ? "Loading…" : options.length ? placeholder : empty}
       onChange={(e) => {
         const picked = options.find((o) => o.value === e.currentTarget.value);
         if (picked) onPick(picked);
       }}
     >
       {(options ?? []).map((o) => (
-        <s-option key={o.value} value={o.value}>
+        <s-option key={o.value} value={o.value} disabled={o.disabled}>
           {o.label}
         </s-option>
       ))}
     </s-select>
+  );
+}
+
+// The values of a metaobject metafield (Color: Red, Blue…), loaded for the chosen definition.
+function EntrySelect({ label, definition, value, error, onPick }) {
+  const entries = useFetcher();
+  useEffect(() => {
+    if (definition) entries.load(`/app/rule-values?kind=entries&definition=${encodeURIComponent(definition)}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [definition]);
+  const loaded = entries.data?.definition === definition ? entries.data : null;
+  return (
+    <ListSelect
+      label={label}
+      options={definition ? loaded?.options : []}
+      value={value}
+      placeholder="Choose a value"
+      error={error}
+      empty={loaded?.blocked ? "Approve the app's new access to load values" : "No values in your store yet"}
+      onPick={onPick}
+    />
   );
 }
 
@@ -1065,10 +1217,12 @@ function CategorySearch({ onPick }) {
 }
 
 // How many products the rules reach right now, so a condition's effect is visible before saving.
-function MatchCount({ rules, refresh, title, note }) {
+function MatchCount({ rules, searchable, refresh, title, note }) {
   const counter = useFetcher();
-  const ready = rules.mode !== "match" || rules.conditions.every((c) => c.value.trim());
-  const query = ready ? rulesQuery(rules) : null;
+  const ready = rules.mode !== "match" || rules.conditions.every((c) => c.value.trim() && (c.field !== "metafield" || c.key));
+  // A metafield Shopify can't search would make the count wrong, so it isn't counted live.
+  const search = ready ? rulesSearch(rules, searchable) : null;
+  const query = search?.exact ? search.query : null;
   // Delayed recounts read the conditions as they are by then, never the ones they started with.
   const latest = useRef(query);
   latest.current = query;
@@ -1104,7 +1258,15 @@ function MatchCount({ rules, refresh, title, note }) {
       <span className="co-tile" aria-hidden="true">
         <s-icon type="product" />
       </span>
-      <strong>{!query ? "Finish the conditions to see matching products" : count == null ? "Counting matching products…" : title(count)}</strong>
+      <strong>
+        {!ready
+          ? "Finish the conditions to see matching products"
+          : !query
+            ? "Matching products are found when you save"
+            : count == null
+              ? "Counting matching products…"
+              : title(count)}
+      </strong>
       {query && count != null && <small>{note}</small>}
     </div>
   );
@@ -1430,14 +1592,70 @@ function ChoicesEditor({ field, onChange }) {
   const swatch = field.type === "swatch";
   const [stepsOpen, setStepsOpen] = useState(false);
   const setChoice = (i, patch) => onChange({ choices: field.choices.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
-  const columns = [swatch && "9rem", "1fr", field.priced && "8rem", "auto"].filter(Boolean).join(" ");
+  const columns = ["auto", swatch && "9rem", "1fr", field.priced && "8rem", "auto"].filter(Boolean).join(" ");
+
+  // Reorder by dragging the handle, or with the arrow keys on it. A choice keeps its price.
+  const [dragFrom, setDragFrom] = useState(null);
+  const [dropAt, setDropAt] = useState(null);
+  const move = (from, to) => {
+    if (from === to || to < 0 || to >= field.choices.length) return;
+    const choices = [...field.choices];
+    choices.splice(to, 0, ...choices.splice(from, 1));
+    onChange({ choices });
+  };
+  const endDrag = () => {
+    setDragFrom(null);
+    setDropAt(null);
+  };
 
   return (
+    <div className="co-choices">
     <s-stack gap="small-300">
       <s-text type="strong">Choices</s-text>
       {field.choices.map((choice, i) => (
         // Index keys are fine: every input is controlled, so values follow the array.
-        <s-grid key={i} gridTemplateColumns={columns} gap="small-300" alignItems="center">
+        <div
+          key={i}
+          className={`co-choice${dragFrom === i ? " is-dragging" : ""}${dropAt === i && dragFrom !== i ? (dragFrom < i ? " is-drop-after" : " is-drop-before") : ""}`}
+          onDragOver={(e) => {
+            if (dragFrom === null) return;
+            e.preventDefault();
+            setDropAt(i);
+          }}
+          onDrop={(e) => {
+            if (dragFrom === null) return;
+            e.preventDefault();
+            // Handled here: the question row around this list must not treat it as a question drop.
+            e.stopPropagation();
+            move(dragFrom, i);
+            endDrag();
+          }}
+        >
+        <s-grid gridTemplateColumns={columns} gap="small-300" alignItems="center">
+          <button
+            type="button"
+            className="co-q__grip co-choice__grip"
+            draggable
+            title="Drag to reorder"
+            aria-label={`Move choice ${i + 1}${choice.label ? `, ${choice.label}` : ""}. Use the up and down arrow keys.`}
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setDragImage(e.currentTarget.closest(".co-choice"), 16, 16);
+              setDragFrom(i);
+            }}
+            onDragEnd={endDrag}
+            onKeyDown={(e) => {
+              const to = { ArrowUp: i - 1, ArrowDown: i + 1 }[e.key];
+              if (to === undefined) return;
+              e.preventDefault();
+              move(i, to);
+              // Focus follows the moved choice (found after React re-renders the list).
+              const list = e.currentTarget.closest(".co-choices");
+              requestAnimationFrame(() => list?.querySelectorAll(".co-choice__grip")[to]?.focus());
+            }}
+          >
+            <s-icon type="drag-handle" />
+          </button>
           {swatch && (
             <s-color-field
               label={`Color for choice ${i + 1}`}
@@ -1472,6 +1690,7 @@ function ChoicesEditor({ field, onChange }) {
             onClick={() => onChange({ choices: field.choices.filter((_, j) => j !== i) })}
           />
         </s-grid>
+        </div>
       ))}
       <s-stack direction="inline" gap="base">
         <s-button variant="tertiary" icon="plus" onClick={() => onChange({ choices: [...field.choices, newChoice(field.type)] })}>
@@ -1485,6 +1704,7 @@ function ChoicesEditor({ field, onChange }) {
       </s-stack>
       {field.priced && stepsOpen && <StepPrices field={field} onChange={onChange} />}
     </s-stack>
+    </div>
   );
 }
 

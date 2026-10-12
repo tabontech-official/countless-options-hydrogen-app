@@ -1788,6 +1788,7 @@ button.co-link {
   display: grid;
   gap: 6px;
 }
+
 /* Under a tag no product has yet: Shopify creates it once a product carries it. */
 .co-newtag {
   display: flex;
@@ -2261,4 +2262,13 @@ button.co-link {
 .co-q__grip { display:grid; place-items:center; width:22px; height:32px; border-radius:8px; color:#8a8a99; cursor:grab; }
 .co-q__grip:hover { background:rgba(0,0,0,.05); color:#303030; }
 .co-q__grip:active { cursor:grabbing; }
+/* Choice rows: the same grip as questions; a violet line shows where the dragged choice lands. */
+.co-choice__grip { height:28px; padding:0; border:0; background:none; }
+.co-choice__grip:focus-visible { outline:2px solid var(--co-brand); outline-offset:1px; }
+.co-choice { position:relative; border-radius:10px; transition:opacity .15s ease; }
+.co-choice.is-dragging { opacity:.45; }
+.co-choice.is-drop-before::before,
+.co-choice.is-drop-after::after { content:""; position:absolute; inset-inline:0; block-size:2px; border-radius:2px; background:var(--co-brand); }
+.co-choice.is-drop-before::before { inset-block-start:-5px; }
+.co-choice.is-drop-after::after { inset-block-end:-5px; }
 .co-qs__item.is-dragging { opacity:.45; }

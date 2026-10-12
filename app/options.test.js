@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { UPLOAD_ACCEPT, appliesTo, hasPrices, mergeFields, rulesQuery, uploadMimeType, validateOptionSet } from "./options.js";
+import { UPLOAD_ACCEPT, appliesTo, hasPrices, mergeFields, rulesQuery, rulesSearch, uploadMimeType, validateOptionSet } from "./options.js";
 import { priceSelection } from "../extensions/product-options-pricing/src/pricing.js";
 
 const field = (over) => ({ id: "f1", type: "text", label: "Engraving", ...over });
@@ -65,6 +65,10 @@ test("says which question and box each error belongs to", () => {
     [[undefined, "name"], ["a", "label"], ["b", "choices"]],
   );
   assert.match(issues[1].message, /^Question 1 \(File upload\)/);
+
+  const rules = { mode: "match", match: "all", conditions: [{ field: "tag", op: "is", value: "gold" }, { field: "collection", op: "is", value: "" }] };
+  const [problem] = validateOptionSet({ name: "Set", fields: [field()], rules }).issues;
+  assert.deepEqual(problem, { message: "Condition 2: choose a collection.", input: "products", condition: 1, fix: "Choose a collection" });
 });
 
 test("keeps prices and conditions, rejects bad ones", () => {
@@ -211,7 +215,7 @@ test("rules: pick products by tag, vendor or type, live", () => {
     conditions: [{ field: "tag", op: "is", value: "gold" }],
   });
   assert.match(save(rules([])).errors.join(), /Add a condition/);
-  assert.match(save(rules([{ field: "tag", op: "is", value: "  " }])).errors.join(), /needs a value/);
+  assert.match(save(rules([{ field: "tag", op: "is", value: "  " }])).errors.join(), /Condition 1: type a tag./);
   assert.deepEqual(save({ mode: "all" }, ["gid://shopify/Product/1"]).data.productIds, [], "rules replace hand-picked products");
 
   // Collections: matched by ID (from inCollection), searched as collection_id, shown by title.
@@ -221,7 +225,7 @@ test("rules: pick products by tag, vendor or type, live", () => {
   assert.equal(appliesTo(rules([{ ...summer, op: "not" }]), mug), true, "no collections known means not in it");
   assert.equal(rulesQuery(rules([{ ...summer, op: "not" }])), "(-collection_id:42) -tag:product-options-addon");
   assert.deepEqual(save(rules([summer])).data.rules.conditions, [summer]);
-  assert.match(save(rules([{ ...summer, value: "gid://shopify/Product/42" }])).errors.join(), /needs a value/, "only collection IDs");
+  assert.match(save(rules([{ ...summer, value: "gid://shopify/Product/42" }])).errors.join(), /Condition 1: choose a collection/, "only collection IDs");
 
   // Status, category, sales channel and catalog, as in Shopify's product filters.
   const shirt = {
@@ -245,7 +249,61 @@ test("rules: pick products by tag, vendor or type, live", () => {
     europe,
     { field: "status", op: "is", value: "" },
   ]);
-  assert.match(save(rules([{ ...tops, value: "rings" }])).errors.join(), /needs a value/, "only category IDs");
+  assert.match(save(rules([{ ...tops, value: "rings" }])).errors.join(), /Condition 1: choose a category/, "only category IDs");
   assert.equal(save(rules([{ ...europe, kind: "moon" }])).data.rules.conditions[0].kind, "region");
   assert.deepEqual(save(undefined, ["gid://shopify/Product/1"]).data.rules.mode, "manual");
+});
+
+test("rules: product metafields, matched like Shopify's search", () => {
+  const rules = (conditions, match = "all") => ({ mode: "match", match, conditions });
+  const mf = (key, type, value, op = "is") => ({ field: "metafield", op, value, key, label: key, type });
+  const tee = {
+    tags: [],
+    metafields: { "custom.material": "Cotton", "custom.sizes": ["S", "M"], "custom.organic": true, "custom.weight": "2.50", "custom.empty": null },
+  };
+  const material = mf("custom.material", "single_line_text_field", "Cotton");
+  assert.equal(appliesTo(rules([material]), tee), true);
+  assert.equal(appliesTo(rules([mf("custom.material", "single_line_text_field", "cotton")]), tee), false, "case-sensitive, as Shopify searches");
+  assert.equal(appliesTo(rules([mf("custom.sizes", "list.single_line_text_field", "M")]), tee), true, "a list matches if any item does");
+  assert.equal(appliesTo(rules([mf("custom.organic", "boolean", "true")]), tee), true);
+  assert.equal(appliesTo(rules([mf("custom.organic", "boolean", "false")]), tee), false);
+  assert.equal(appliesTo(rules([mf("custom.weight", "number_decimal", "2.5")]), tee), true, "numbers compare as numbers");
+  assert.equal(appliesTo(rules([mf("custom.empty", "single_line_text_field", "x", "not")]), tee), true, "no value: 'is not' holds");
+  assert.equal(appliesTo(rules([mf("custom.gone", "single_line_text_field", "x")]), tee), false);
+
+  // Searched only where Shopify can filter it; otherwise a superset ("all") or every product ("any").
+  const filterable = new Set(["custom.material"]);
+  const tagIs = { field: "tag", op: "is", value: "tee" };
+  assert.deepEqual(rulesSearch(rules([{ ...material, op: "not" }, mf("custom.organic", "boolean", "true")]), new Set(["custom.material", "custom.organic"])), {
+    query: '(-metafields.custom.material:"Cotton" AND metafields.custom.organic:true) -tag:product-options-addon',
+    exact: true,
+  });
+  assert.deepEqual(rulesSearch(rules([tagIs, mf("custom.organic", "boolean", "true")]), filterable), {
+    query: '(tag:"tee") -tag:product-options-addon',
+    exact: false,
+  });
+  assert.deepEqual(rulesSearch(rules([tagIs, mf("custom.organic", "boolean", "true")], "any"), filterable), {
+    query: "-tag:product-options-addon",
+    exact: false,
+  });
+
+  const save = (conditions) => validateOptionSet({ name: "Set", fields: [field()], rules: rules(conditions) });
+  assert.deepEqual(save([material]).data.rules.conditions, [material]);
+  assert.equal(save([mf("custom.weight", "number_integer", "07")]).data.rules.conditions[0].value, "7");
+  assert.match(save([mf("custom.weight", "number_integer", "lots")]).errors.join(), /Condition 1: enter a number/);
+  assert.match(save([mf("custom.organic", "boolean", "yes")]).errors.join(), /Condition 1: choose true or false/);
+  assert.match(save([mf("app--123.options", "single_line_text_field", "x")]).errors.join(), /choose a metafield/, "never an app's own");
+  assert.match(save([mf("custom.stars", "rating", "4")]).errors.join(), /choose a metafield/, "only types we can compare");
+
+  // Category metafields (Color…) point at metaobject entries: matched by ID, shown by name.
+  const red = { ...mf("shopify.color-pattern", "list.metaobject_reference", "gid://shopify/Metaobject/7"), valueLabel: "Red" };
+  const shirt = { tags: [], metafields: { "shopify.color-pattern": ["gid://shopify/Metaobject/5", "gid://shopify/Metaobject/7"] } };
+  assert.equal(appliesTo(rules([red]), shirt), true);
+  assert.equal(appliesTo(rules([{ ...red, op: "not" }]), shirt), false);
+  assert.deepEqual(save([red]).data.rules.conditions, [red]);
+  assert.match(save([{ ...red, value: "Red" }]).errors.join(), /Condition 1: choose a value/, "only entry IDs");
+  assert.equal(
+    rulesQuery(rules([red]), new Set(["shopify.color-pattern"])),
+    '(metafields.shopify.color-pattern:"gid://shopify/Metaobject/7") -tag:product-options-addon',
+  );
 });

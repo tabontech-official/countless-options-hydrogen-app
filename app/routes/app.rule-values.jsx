@@ -1,6 +1,6 @@
 import { authenticate } from "../shopify.server";
-import { ADDON_TAG, MAX_PRODUCTS } from "../options";
-import { gql } from "../options.server";
+import { ADDON_TAG, MAX_PRODUCTS, isMetafieldKey } from "../options";
+import { gql, productMetafieldDefinitions } from "../options.server";
 
 // POST { tag, productIds }: puts a tag on products. Shopify has no tag without a product, so this
 // is how a new tag from a condition comes to exist (the products/update webhooks that follow
@@ -38,6 +38,9 @@ export const action = async ({ request }) => {
 //   ?kind=channel       sales channels to choose from
 //   ?kind=catalog       catalogs, each with its kind (region, retail, company location, B2B, unassigned)
 //   ?kind=category&q=…  Shopify product categories matching a search
+//   ?kind=metafield     product metafield definitions a condition can check
+//   ?kind=values&keys=a.b,c.d  values products already have in those metafields
+//   ?kind=entries&definition=…  the entries of a metaobject definition (a category metafield's values)
 // Channels and catalogs are offered by their publication: that's what a product is published to.
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -103,6 +106,58 @@ export const loader = async ({ request }) => {
       .filter(({ c }) => c.publication)
       .map(({ c, kind }) => ({ value: c.publication.id, label: c.title, kind }));
     return { kind, options };
+  }
+  if (kind === "metafield") return { kind, options: await productMetafieldDefinitions(admin) };
+  if (kind === "values") {
+    // The values products already have in some text metafields, to suggest while typing.
+    // ponytail: read from the 250 most recently updated products (fewer with many keys, to stay
+    // under the query cost limit); a value only older products have can still be typed.
+    const keys = [...new Set((params.get("keys") ?? "").split(","))].filter(isMetafieldKey).slice(0, 10);
+    const first = Math.min(250, Math.floor(900 / (1 + keys.length)));
+    const data = keys.length
+      ? await gql(
+          admin,
+          `#graphql
+          query MetafieldValues($first: Int!${keys.map((_, i) => `, $n${i}: String!, $k${i}: String!`).join("")}) {
+            products(first: $first, sortKey: UPDATED_AT, reverse: true, query: "-tag:${ADDON_TAG}") {
+              nodes { ${keys.map((_, i) => `m${i}: metafield(namespace: $n${i}, key: $k${i}) { jsonValue }`).join(" ")} }
+            }
+          }`,
+          {
+            first,
+            ...Object.fromEntries(
+              keys.flatMap((key, i) => {
+                const at = key.lastIndexOf(".");
+                return [[`n${i}`, key.slice(0, at)], [`k${i}`, key.slice(at + 1)]];
+              }),
+            ),
+          },
+        )
+      : null;
+    const values = Object.fromEntries(
+      keys.map((key, i) => [
+        key,
+        [...new Set((data?.products.nodes ?? []).flatMap((p) => [p[`m${i}`]?.jsonValue ?? []].flat().map(String)))].sort(),
+      ]),
+    );
+    return { kind, keys: keys.join(","), values };
+  }
+  if (kind === "entries") {
+    // The entries of one metaobject definition (Color: Red, Blue…), for a metafield condition.
+    // ponytail: first 250 entries.
+    const id = params.get("definition") ?? "";
+    if (!/^gid:\/\/shopify\/MetaobjectDefinition\/\d+$/.test(id)) throw new Response("Bad definition", { status: 400 });
+    const data = await gql(
+      admin,
+      `#graphql
+      query MetaobjectEntries($id: ID!) {
+        metaobjectDefinition(id: $id) { metaobjects(first: 250) { nodes { id displayName } } }
+      }`,
+      { id },
+    );
+    const entries = data?.metaobjectDefinition?.metaobjects.nodes;
+    // Null until the store approves the app's read_metaobjects scopes.
+    return { kind, definition: id, options: entries?.map((e) => ({ value: e.id, label: e.displayName })) ?? [], blocked: !entries };
   }
   if (kind === "category") {
     const data = await gql(

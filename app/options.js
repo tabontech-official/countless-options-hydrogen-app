@@ -78,6 +78,30 @@ export const RULE_FIELDS = {
   collection: { label: "Collection", input: "pick" },
   channel: { label: "Sales channel", input: "pick" },
   catalog: { label: "Catalog", input: "pick" },
+  metafield: { label: "Metafield", input: "metafield" },
+};
+// Product metafield types a condition can compare, and how: exact text (case-sensitive, like
+// Shopify's search; a list matches if any item does), true/false, a number, or one entry of a
+// metaobject (Shopify's category metafields such as Color: stored by ID, shown by name).
+// ponytail: product/file references, measurements, ratings, rich text and JSON are listed but
+// can't be picked; each needs its own value picker and compare.
+export const METAFIELD_TYPES = {
+  single_line_text_field: "text",
+  "list.single_line_text_field": "text",
+  multi_line_text_field: "text",
+  url: "text",
+  "list.url": "text",
+  color: "text",
+  "list.color": "text",
+  date: "text",
+  "list.date": "text",
+  boolean: "boolean",
+  number_integer: "number",
+  "list.number_integer": "number",
+  number_decimal: "number",
+  "list.number_decimal": "number",
+  metaobject_reference: "entry",
+  "list.metaobject_reference": "entry",
 };
 export const PRODUCT_STATUSES = { ACTIVE: "Active", DRAFT: "Draft", ARCHIVED: "Archived", UNLISTED: "Unlisted" };
 // Catalog conditions first ask which kind of catalog, like Shopify's admin.
@@ -92,22 +116,25 @@ export const blankCondition = (field = "tag") => ({
   op: "is",
   value: field === "status" ? "ACTIVE" : "",
   ...(field === "catalog" && { kind: "region" }),
+  // `key` is the definition's "namespace.key"; `label` its name, `type` its type.
+  ...(field === "metafield" && { key: "", type: "" }),
 });
 
 // A set's rules with every key present (sets saved before rules existed store {}).
 export const rulesOf = (rules) => ({ mode: "manual", match: "all", conditions: [], ...rules });
 
 // Whether a product gets a set through its rules. `product` is { tags, vendor, productType,
-// status, category: { id }, collections: [GIDs], publications: [GIDs] }: the collections and
-// publications are only the ones the rules name (see syncProducts). Text compares
-// case-insensitively, like Shopify's own tags. Hand-picked sets answer false.
+// status, category: { id }, collections: [GIDs], publications: [GIDs], metafields: { "ns.key":
+// jsonValue or null } }: the collections, publications and metafields are only the ones the
+// rules name (see syncProducts). Tags, vendor and type compare case-insensitively, like
+// Shopify's own; metafields exactly, like Shopify's search. Hand-picked sets answer false.
 export function appliesTo(rules, product) {
   const { mode, match, conditions } = rulesOf(rules);
   const lower = (s) => String(s ?? "").trim().toLowerCase();
   const tags = (product?.tags ?? []).map(lower);
   if (mode === "manual" || !product || tags.includes(ADDON_TAG)) return false;
   if (mode === "all") return true;
-  const has = (field, value) => {
+  const has = ({ field, value, key, type }) => {
     switch (field) {
       case "tag":
         return tags.includes(lower(value));
@@ -121,23 +148,38 @@ export function appliesTo(rules, product) {
         return product.category?.id === value;
       case "collection":
         return (product.collections ?? []).includes(value);
+      case "metafield": {
+        const stored = product.metafields?.[key];
+        const kind = METAFIELD_TYPES[type];
+        // An empty metafield has no value, so "is not" holds, as in Shopify's search.
+        return (
+          stored != null &&
+          [stored].flat().some((v) => (kind === "number" ? Number(v) === Number(value) : String(v) === value))
+        );
+      }
       default: // channel, catalog: published on that publication
         return (product.publications ?? []).includes(value);
     }
   };
-  const meets = ({ field, op, value }) => (op === "not") !== has(field, value);
+  const meets = (c) => (c.op === "not") !== has(c);
   return conditions.length > 0 && (match === "any" ? conditions.some(meets) : conditions.every(meets));
 }
 
 // The same rules as an Admin product search, to find today's matches when a set is saved and
 // to count them in the editor. A superset is fine: appliesTo has the final say when syncing.
+// Shopify only searches metafields whose definition has admin filtering on (`searchable`, a Set of
+// "ns.key"); it silently ignores the rest, so those terms are left out here: under "all" that's a
+// superset, under "any" it has to be every product. `exact` says whether nothing was left out.
 // ponytail: channels and catalogs use `publication_ids`, which Shopify deprecated in 2025-12;
 // when it's removed, leave those terms out (the search becomes a superset; counts an upper bound).
-export function rulesQuery(rules) {
+export function rulesQuery(rules, searchable = new Set()) {
+  return rulesSearch(rules, searchable).query;
+}
+export function rulesSearch(rules, searchable = new Set()) {
   const { mode, match, conditions } = rulesOf(rules);
-  if (mode === "manual") return null;
+  if (mode === "manual") return { query: null, exact: true };
   const notAddon = `-tag:${ADDON_TAG}`;
-  if (mode === "all") return notAddon;
+  if (mode === "all") return { query: notAddon, exact: true };
   const quote = (v) => `"${v.replace(/["\\]/g, "\\$&")}"`;
   const tail = (gid) => gid.split("/").pop();
   const term = {
@@ -149,9 +191,13 @@ export function rulesQuery(rules) {
     collection: (v) => `collection_id:${tail(v)}`,
     channel: (v) => `publication_ids:${tail(v)}`,
     catalog: (v) => `publication_ids:${tail(v)}`,
+    metafield: (v, c) => `metafields.${c.key}:${["number", "boolean"].includes(METAFIELD_TYPES[c.type]) ? v : quote(v)}`,
   };
-  const terms = conditions.map((c) => (c.op === "not" ? "-" : "") + term[c.field](c.value));
-  return `(${terms.join(match === "any" ? " OR " : " AND ")}) ${notAddon}`;
+  const usable = conditions.filter((c) => c.field !== "metafield" || searchable.has(c.key));
+  const exact = usable.length === conditions.length;
+  if (!usable.length || (!exact && match === "any")) return { query: notAddon, exact };
+  const terms = usable.map((c) => (c.op === "not" ? "-" : "") + term[c.field](c.value, c));
+  return { query: `(${terms.join(match === "any" ? " OR " : " AND ")}) ${notAddon}`, exact };
 }
 
 // "Tag is engraving and Collection is Rings" (then "+ 2 more"), for one-line summaries.
@@ -160,12 +206,13 @@ export function describeRules(rules) {
   if (mode !== "match") return ASSIGN_MODES[mode];
   const shown = (c) =>
     !c.value ? "…"
+    : c.field === "metafield" ? c.valueLabel || c.value
     : RULE_FIELDS[c.field].input === "text" ? c.value
     : c.field === "status" ? PRODUCT_STATUSES[c.value]
     : c.label;
   const text = conditions
     .slice(0, 2)
-    .map((c) => `${RULE_FIELDS[c.field].label} ${RULE_OPS[c.op]} ${shown(c)}`)
+    .map((c) => `${(c.field === "metafield" && c.label) || RULE_FIELDS[c.field].label} ${RULE_OPS[c.op]} ${shown(c)}`)
     .join(match === "any" ? " or " : " and ");
   return conditions.length > 2 ? `${text} + ${conditions.length - 2} more` : text;
 }
@@ -352,7 +399,7 @@ export function validateOptionSet(input) {
   }
   issues.push(...multiplierIssues.values());
 
-  const rules = cleanRules(input?.rules, (message) => fail(message, { input: "products" }));
+  const rules = cleanRules(input?.rules, (message, condition, fix) => fail(message, { input: "products", condition, fix }));
   // Hand-picked products only count for hand-picked sets.
   const productIds =
     rules.mode === "manual"
@@ -375,6 +422,7 @@ function cleanRules(input, fail) {
     const op = c?.op === "not" ? "not" : "is";
     if (RULE_FIELDS[field].input === "text") return { field, op, value: text(c?.value, 255) };
     if (field === "status") return { field, op, value: Object.hasOwn(PRODUCT_STATUSES, c?.value) ? c.value : "" };
+    if (field === "metafield") return cleanMetafieldCondition(c, op);
     // Picked resources are kept by ID (they can be renamed), with their name for display.
     const value = PICKED_ID[field].test(c?.value) ? c.value : "";
     const label = text(c?.label, 255) || RULE_FIELDS[field].label;
@@ -384,9 +432,50 @@ function cleanRules(input, fail) {
   if (mode === "match") {
     if (!conditions.length) fail("Add a condition, or choose another way to pick products.");
     if (raw.length > MAX_CONDITIONS) fail(`Use up to ${MAX_CONDITIONS} conditions.`);
-    if (conditions.some((c) => !c.value)) fail("Every condition needs a value: type one, or choose one from the list.");
+    // `i` and `fix` let the editor put the error on the field itself ("Choose a collection").
+    conditions.forEach((c, i) => {
+      const fix = c.field === "metafield" && !c.key ? "choose a metafield" : !c.value && missingValueHint(c);
+      if (fix) fail(`Condition ${i + 1}: ${fix}.`, i, fix.replace(/^./, (ch) => ch.toUpperCase()));
+    });
   }
   return { mode, match: input?.match === "any" ? "any" : "all", conditions };
+}
+
+// What to do about a condition without a value, in the words of its own control.
+function missingValueHint(c) {
+  if (c.field === "metafield") {
+    const kind = METAFIELD_TYPES[c.type];
+    return kind === "number" ? "enter a number" : kind === "boolean" ? "choose true or false" : kind === "entry" ? "choose a value" : "type a value";
+  }
+  if (RULE_FIELDS[c.field].input === "text") return `type a ${RULE_FIELDS[c.field].label.toLowerCase()}`;
+  return `choose a ${RULE_FIELDS[c.field].label.toLowerCase()}`;
+}
+
+export const isMetafieldKey = (key) => typeof key === "string" && METAFIELD_KEY.test(key);
+
+// A metafield condition: a product metafield definition ("namespace.key", never an app's own
+// "app--…" namespace) of a type we can compare, and a value that fits the type.
+const METAFIELD_KEY = /^(?!app--)[\w-]{2,255}\.[\w-]{2,64}$/;
+function cleanMetafieldCondition(c, op) {
+  const key = isMetafieldKey(c?.key) ? c.key : "";
+  const type = key && Object.hasOwn(METAFIELD_TYPES, c?.type) ? c.type : "";
+  const raw = text(c?.value, 255);
+  const kind = METAFIELD_TYPES[type];
+  const value =
+    kind === "boolean" ? (["true", "false"].includes(raw) ? raw : "")
+    : kind === "number" ? (raw !== "" && Number.isFinite(Number(raw)) ? String(Number(raw)) : "")
+    : kind === "entry" ? (/^gid:\/\/shopify\/Metaobject\/\d+$/.test(raw) ? raw : "")
+    : raw;
+  return {
+    field: "metafield",
+    op,
+    value,
+    key: type ? key : "",
+    label: text(c?.label, 255) || key,
+    type,
+    // An entry is kept by ID (it can be renamed) and shown by its name.
+    ...(kind === "entry" && { valueLabel: text(c?.valueLabel, 255) || value }),
+  };
 }
 
 // A product can belong to several sets; first set wins when labels collide,

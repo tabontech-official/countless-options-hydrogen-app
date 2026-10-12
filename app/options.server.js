@@ -1,5 +1,5 @@
 import prisma from "./db.server";
-import { appliesTo, hasPrices, mergeFields, rulesOf, rulesQuery } from "./options";
+import { METAFIELD_TYPES, appliesTo, hasPrices, mergeFields, rulesOf, rulesQuery } from "./options";
 
 export const BLOCK_HANDLE = "product_options";
 
@@ -19,7 +19,7 @@ const canonical = (value) =>
 
 // Rewrites each product's `$app.options` metafield from every ACTIVE set that applies to it:
 // picked by hand, or matched by the set's rules against the product's current tags, vendor,
-// type, status, category, collections and publications (sales channels and catalogs).
+// type, status, category, collections, publications (sales channels and catalogs) and metafields.
 // Call with every product whose sets may have changed (old and new).
 // Only products whose options actually change are written, so the products/update webhook our
 // own write triggers finds nothing to do and stops there. Rule-based sets also get their
@@ -41,21 +41,27 @@ export async function syncProducts(admin, shop, productIds) {
   ];
   const collections = named(["collection"]);
   const publications = named(["channel", "catalog"]);
+  const metafields = [
+    ...new Set(sets.flatMap((s) => s.rules.conditions.filter((c) => c.field === "metafield" && c.key).map((c) => c.key))),
+  ];
+  // Every metafield read costs a point per product, and a query may cost at most 1,000.
+  const batchSize = Math.max(1, Math.floor(750 / (3 + metafields.length)));
 
   const toSet = [];
   const toDelete = [];
   const matched = [];
   const unmatched = [];
-  for (const batch of chunks(ids, 250)) {
+  for (const batch of chunks(ids, batchSize)) {
     const data = await gql(
       admin,
       `#graphql
-      query ProductFacts($ids: [ID!]!${collections.map((_, i) => `, $c${i}: ID!`).join("")}${publications.map((_, i) => `, $p${i}: ID!`).join("")}) {
+      query ProductFacts($ids: [ID!]!${collections.map((_, i) => `, $c${i}: ID!`).join("")}${publications.map((_, i) => `, $p${i}: ID!`).join("")}${metafields.map((_, i) => `, $n${i}: String!, $k${i}: String!`).join("")}) {
         nodes(ids: $ids) {
           ... on Product {
             id tags vendor productType status category { id }
             ${collections.map((_, i) => `c${i}: inCollection(id: $c${i})`).join(" ")}
             ${publications.map((_, i) => `p${i}: publishedOnPublication(publicationId: $p${i})`).join(" ")}
+            ${metafields.map((_, i) => `m${i}: metafield(namespace: $n${i}, key: $k${i}) { jsonValue }`).join(" ")}
             options: metafield(namespace: "$app", key: "options") { value }
           }
         }
@@ -64,12 +70,19 @@ export async function syncProducts(admin, shop, productIds) {
         ids: batch,
         ...Object.fromEntries(collections.map((id, i) => [`c${i}`, id])),
         ...Object.fromEntries(publications.map((id, i) => [`p${i}`, id])),
+        ...Object.fromEntries(
+          metafields.flatMap((key, i) => {
+            const at = key.lastIndexOf(".");
+            return [[`n${i}`, key.slice(0, at)], [`k${i}`, key.slice(at + 1)]];
+          }),
+        ),
       },
     );
     // Deleted products (and IDs from other shops) come back null and are skipped.
     for (const product of data.nodes.filter((p) => p?.id)) {
       product.collections = collections.filter((_, i) => product[`c${i}`]);
       product.publications = publications.filter((_, i) => product[`p${i}`]);
+      product.metafields = Object.fromEntries(metafields.map((key, i) => [key, product[`m${i}`]?.jsonValue ?? null]));
       const applying = sets.filter((s) => (s.rules.mode === "manual" ? s.has.has(product.id) : appliesTo(s.rules, product)));
       for (const s of sets.filter((s) => s.rules.mode !== "manual")) {
         const row = { optionSetId: s.id, productId: product.id };
@@ -232,7 +245,9 @@ export async function getShopCurrency(admin) {
 // ponytail: walks every page in the request, fine to a few thousand products; move to a bulk
 // operation if stores with tens of thousands of products use "All products".
 export async function ruleMatches(admin, rules) {
-  const query = rulesQuery(rules);
+  const usesMetafields = rulesOf(rules).conditions.some((c) => c.field === "metafield");
+  const searchable = usesMetafields ? searchableKeys(await productMetafieldDefinitions(admin)) : undefined;
+  const query = rulesQuery(rules, searchable);
   if (!query) return [];
   const ids = [];
   let after = null;
@@ -253,6 +268,51 @@ export async function ruleMatches(admin, rules) {
   } while (after);
   return ids;
 }
+
+// The store's product metafield definitions (not an app's own "app--" namespace). Types a
+// condition can't compare come back `disabled`, so the merchant sees why theirs can't be picked.
+// `searchable`: Shopify's product search can filter on it.
+// ponytail: first 250; a store has at most 256 merchant definitions per resource.
+export async function productMetafieldDefinitions(admin) {
+  const data = await gql(
+    admin,
+    `#graphql
+    query ProductMetafieldDefinitions {
+      metafieldDefinitions(ownerType: PRODUCT, first: 250) {
+        nodes {
+          name namespace key type { name }
+          validations { name value }
+          capabilities { adminFilterable { status } }
+        }
+      }
+    }`,
+  );
+  return data.metafieldDefinitions.nodes
+    .filter((d) => !d.namespace.startsWith("app--"))
+    .map((d) => {
+      const supported = Object.hasOwn(METAFIELD_TYPES, d.type.name);
+      // A definition limited to a list of choices offers those, like Shopify's own field.
+      let choices = null;
+      try {
+        choices = JSON.parse(d.validations.find((v) => v.name === "choices")?.value ?? "null");
+      } catch {
+        // Not a list: type the value instead.
+      }
+      // Metaobject references name the definition their entries come from.
+      const source = d.validations.find((v) => v.name === "metaobject_definition_id")?.value;
+      return {
+        value: `${d.namespace}.${d.key}`,
+        label: supported ? d.name : `${d.name} (${d.type.name.replaceAll("_", " ")}: not supported)`,
+        type: d.type.name,
+        searchable: d.capabilities?.adminFilterable?.status === "FILTERABLE",
+        ...(source && { source }),
+        ...(!supported && { disabled: true }),
+        ...(Array.isArray(choices) && { choices: choices.map(String) }),
+      };
+    })
+    .sort((a, b) => Boolean(a.disabled) - Boolean(b.disabled));
+}
+export const searchableKeys = (definitions) => new Set(definitions.filter((d) => d.searchable).map((d) => d.value));
 
 // Current title + thumbnail for product GIDs. Only this shop's existing products come back,
 // so it doubles as validation of IDs sent by the browser.

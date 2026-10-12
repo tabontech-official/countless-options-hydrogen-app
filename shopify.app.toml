@@ -9,7 +9,7 @@ embedded = true
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # write_files + write_app_proxy: customers' "File upload" answers go to the shop's Files (app/routes/proxy.upload.jsx).
 # read_markets: the Catalog condition groups catalogs by kind (region, retail, company location), as Shopify's admin does.
-scopes = "write_products,read_themes,write_cart_transforms,write_publications,write_files,write_app_proxy,read_markets"
+scopes = "write_products,read_themes,write_cart_transforms,write_publications,write_files,write_app_proxy,read_markets,read_metaobjects,read_metaobject_definitions"
 
 # Storefront path /apps/countless-options/* reaches this app's /proxy/* routes.
 # Merchants can rename it per store in Settings > Apps; product-options-upload.js assumes this default.

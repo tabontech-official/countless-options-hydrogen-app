@@ -20,8 +20,14 @@ export const action = async ({ request }) => {
     rulesOf(s.rules).conditions.some((c) => c.field === "collection" && c.value === payload.admin_graphql_api_id),
   );
   if (affected.length) {
-    const now = await Promise.all(affected.map((s) => ruleMatches(admin, s.rules)));
-    await syncProducts(admin, shop, [...affected.flatMap((s) => s.products.map((p) => p.productId)), ...now.flat()]);
+    // Only products in the collection now can have newly matched; the rest stay as recorded.
+    // (Searching each set's whole rules could scan every product, e.g. "any" with a metafield.)
+    const inCollection = await ruleMatches(admin, {
+      mode: "match",
+      match: "all",
+      conditions: [{ field: "collection", op: "is", value: payload.admin_graphql_api_id }],
+    });
+    await syncProducts(admin, shop, [...affected.flatMap((s) => s.products.map((p) => p.productId)), ...inCollection]);
   }
   return new Response();
 };

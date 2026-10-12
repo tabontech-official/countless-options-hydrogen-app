@@ -30,3 +30,6 @@ database.sqlite
 .react-router/
 # Vercel
 .vercel
+
+# Local Claude design skill (kept out of the repo)
+.claude/skills/glass-admin-design/
