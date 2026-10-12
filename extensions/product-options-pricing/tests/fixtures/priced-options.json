@@ -64,10 +64,10 @@
                 "quantity": 1,
                 "price": { "adjustment": { "fixedPricePerUnit": { "amount": "100.0" } } },
                 "attributes": [
-                  { "key": "Size", "value": "Large" },
-                  { "key": "Extras", "value": "Gift wrap, Card" },
-                  { "key": "Engraving", "value": "John" },
-                  { "key": "Note", "value": "Hi" }
+                  { "key": "_Size", "value": "Large" },
+                  { "key": "_Extras", "value": "Gift wrap, Card" },
+                  { "key": "_Engraving", "value": "John" },
+                  { "key": "_Note", "value": "Hi" }
                 ]
               },
               {
@@ -75,9 +75,9 @@
                 "quantity": 1,
                 "price": { "adjustment": { "fixedPricePerUnit": { "amount": "18.50" } } },
                 "attributes": [
-                  { "key": "Size", "value": "Large (+5.00 USD)" },
-                  { "key": "Extras", "value": "Gift wrap, Card (+3.50 USD)" },
-                  { "key": "Engraving", "value": "John (+10.00 USD)" }
+                  { "key": "_Size", "value": "Large (+5.00 USD)" },
+                  { "key": "_Extras", "value": "Gift wrap, Card (+3.50 USD)" },
+                  { "key": "_Engraving", "value": "John (+10.00 USD)" }
                 ]
               }
             ]

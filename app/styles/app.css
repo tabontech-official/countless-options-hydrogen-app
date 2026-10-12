@@ -1090,6 +1090,25 @@ textarea {
   align-items: center;
   padding-inline: 22px;
 }
+/* Header and rows end in the same 32px delete column (the row link stops before it). */
+.co-table__head {
+  grid-template-columns: minmax(0, 1fr) 92px 84px 84px 104px 32px;
+  padding-inline-end: 14px;
+}
+.co-table__rows li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 24px;
+  align-items: center;
+  padding-inline-end: 14px;
+  transition: background 0.15s ease;
+}
+.co-table__rows li:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+.co-table__rows .co-set {
+  padding-inline-end: 0;
+}
 .co-table__head {
   padding-block: 10px;
   border-block-end: 1px solid var(--co-line);
@@ -1119,9 +1138,6 @@ textarea {
   color: inherit;
   text-decoration: none;
   transition: background 0.15s ease;
-}
-.co-set:hover {
-  background: rgba(255, 255, 255, 0.55);
 }
 .co-set:focus-visible {
   outline: 2px solid var(--co-brand);
@@ -1279,6 +1295,13 @@ textarea {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--co-shadow);
 }
+.co-q.co-q--error {
+  border-color: rgba(197, 40, 12, 0.55);
+  box-shadow: 0 0 0 1px rgba(197, 40, 12, 0.2);
+}
+.co-q__title small.co-q__issue {
+  color: #b42318;
+}
 .co-q--follow {
   border-inline-start: 2px solid rgba(91, 71, 224, 0.45);
 }
@@ -1317,6 +1340,15 @@ textarea {
   font-size: 13px;
   font-weight: 600;
   color: var(--co-ink);
+}
+.co-q__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+}
+.co-q__name strong {
+  min-inline-size: 0; /* long titles still truncate next to the badge */
 }
 .co-q__title small {
   font-size: 11.5px;

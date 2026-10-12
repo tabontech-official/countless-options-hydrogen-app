@@ -324,19 +324,19 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold"
                   },
                   {
-                    "key": "Number of teeth",
+                    "key": "_Number of teeth",
                     "value": "3"
                   },
                   {
-                    "key": "Diamonds",
+                    "key": "_Diamonds",
                     "value": "Yes"
                   },
                   {
-                    "key": "Engraving",
+                    "key": "_Engraving",
                     "value": "AB"
                   }
                 ]
@@ -353,15 +353,15 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold, 3 × 50.00 (+150.00 USD)"
                   },
                   {
-                    "key": "Diamonds",
+                    "key": "_Diamonds",
                     "value": "Yes, 3 × 30.00 (+90.00 USD)"
                   },
                   {
-                    "key": "Engraving",
+                    "key": "_Engraving",
                     "value": "AB (+10.00 USD)"
                   }
                 ]
@@ -385,15 +385,15 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Silver"
                   },
                   {
-                    "key": "Number of teeth",
+                    "key": "_Number of teeth",
                     "value": "2"
                   },
                   {
-                    "key": "Diamonds",
+                    "key": "_Diamonds",
                     "value": "No"
                   }
                 ]
@@ -410,7 +410,7 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Silver, 2 × 20.00 (+40.00 USD)"
                   }
                 ]
@@ -434,7 +434,7 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold"
                   }
                 ]
@@ -451,7 +451,7 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold, 1 × 50.00 (+50.00 USD)"
                   }
                 ]
@@ -475,11 +475,11 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold"
                   },
                   {
-                    "key": "Number of teeth",
+                    "key": "_Number of teeth",
                     "value": "32"
                   }
                 ]
@@ -496,7 +496,7 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold, 32 × 50.00 (+1600.00 USD)"
                   }
                 ]

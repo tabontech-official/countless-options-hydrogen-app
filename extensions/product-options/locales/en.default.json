@@ -15,6 +15,8 @@
     "upload_type": "Upload an image, a PDF, or a Word, Excel, PowerPoint or text file.",
     "upload_size": "Files can be up to 10 MB.",
     "upload_failed": "The upload didn't work. Please try again.",
+    "view_image": "View image file",
+    "view_file": "View uploaded file",
     "empty": "Product options: this product isn't in an active option set yet. Assign it in the app to show fields here."
   }
 }

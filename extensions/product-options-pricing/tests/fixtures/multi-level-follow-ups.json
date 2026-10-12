@@ -377,27 +377,27 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold"
                   },
                   {
-                    "key": "Number of teeth",
+                    "key": "_Number of teeth",
                     "value": "3"
                   },
                   {
-                    "key": "Diamonds",
+                    "key": "_Diamonds",
                     "value": "Yes"
                   },
                   {
-                    "key": "Diamond type",
+                    "key": "_Diamond type",
                     "value": "VVS"
                   },
                   {
-                    "key": "Setting",
+                    "key": "_Setting",
                     "value": "Bezel"
                   },
                   {
-                    "key": "Gift box",
+                    "key": "_Gift box",
                     "value": "Yes"
                   }
                 ]
@@ -414,19 +414,19 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold, 3 × 50.00 (+150.00 USD)"
                   },
                   {
-                    "key": "Diamond type",
+                    "key": "_Diamond type",
                     "value": "VVS, 3 × 30.00 (+90.00 USD)"
                   },
                   {
-                    "key": "Setting",
+                    "key": "_Setting",
                     "value": "Bezel (+5.00 USD)"
                   },
                   {
-                    "key": "Gift box",
+                    "key": "_Gift box",
                     "value": "Yes (+5.00 USD)"
                   }
                 ]
@@ -450,15 +450,15 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Silver"
                   },
                   {
-                    "key": "Number of teeth",
+                    "key": "_Number of teeth",
                     "value": "2"
                   },
                   {
-                    "key": "Diamonds",
+                    "key": "_Diamonds",
                     "value": "No"
                   }
                 ]
@@ -475,7 +475,7 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Silver, 2 × 20.00 (+40.00 USD)"
                   }
                 ]
@@ -499,19 +499,19 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold"
                   },
                   {
-                    "key": "Number of teeth",
+                    "key": "_Number of teeth",
                     "value": "1"
                   },
                   {
-                    "key": "Diamonds",
+                    "key": "_Diamonds",
                     "value": "Yes"
                   },
                   {
-                    "key": "Diamond type",
+                    "key": "_Diamond type",
                     "value": "Regular"
                   }
                 ]
@@ -528,11 +528,11 @@
                 },
                 "attributes": [
                   {
-                    "key": "Metal",
+                    "key": "_Metal",
                     "value": "Gold, 1 × 50.00 (+50.00 USD)"
                   },
                   {
-                    "key": "Diamond type",
+                    "key": "_Diamond type",
                     "value": "Regular, 1 × 10.00 (+10.00 USD)"
                   }
                 ]

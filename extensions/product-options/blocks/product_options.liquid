@@ -22,6 +22,8 @@
     data-po-upload-type="{{ 'product_options.upload_type' | t | escape }}"
     data-po-upload-size="{{ 'product_options.upload_size' | t | escape }}"
     data-po-upload-failed="{{ 'product_options.upload_failed' | t | escape }}"
+    data-po-view-image="{{ 'product_options.view_image' | t | escape }}"
+    data-po-view-file="{{ 'product_options.view_file' | t | escape }}"
   >
     {%- for f in fields -%}
       {%- assign fid = 'po-' | append: block.id | append: '-' | append: forloop.index -%}
@@ -130,7 +132,7 @@
               {%- when 'file' -%}
                 {%- comment -%}
                   product-options-upload.js uploads the chosen file and puts its URL in the hidden
-                  .po__input, which is what goes on the order. `accept` mirrors UPLOAD_TYPES in app/options.js.
+                  .po__input, which is what goes on the order (shown as "View image file"). `accept` mirrors UPLOAD_TYPES in app/options.js.
                 {%- endcomment -%}
                 <input class="po__file" type="file" id="{{ fid }}" accept=".jpg,.jpeg,.png,.webp,.gif,.heic,.pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.odp" {{ attrs }}>
                 <input class="po__input" type="hidden">

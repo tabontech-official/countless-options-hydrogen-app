@@ -1,6 +1,7 @@
 // "File upload" questions: sends the chosen file to the shop's Files through the app proxy
 // (app/routes/proxy.upload.jsx), then puts the file's URL in the field's hidden .po__input,
-// which product-options.js saves on the order like any other answer. Loaded only on
+// which product-options.js saves as _<label>; the visible property says "View image file"
+// (data-po-show), which product-options-links.js turns into a link in the cart. Loaded only on
 // products with an upload question; kept apart from product-options.js for its size limit.
 (() => {
   if (window.poUploads) return; // one listener, however many blocks load this
@@ -49,6 +50,7 @@
       if (!(await fetch(target.url, { method: "POST", body: form })).ok) throw new Error();
       const { url } = await proxy({ intent: "create", resourceUrl: target.resourceUrl, token: target.token });
       if (field.dataset.poPick !== pick) return;
+      field.dataset.poShow = file.type.startsWith("image/") ? root.dataset.poViewImage : root.dataset.poViewFile;
       answer.value = url;
       show(`${root.dataset.poUploaded}: ${file.name}`);
     } catch (error) {

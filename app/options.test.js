@@ -49,13 +49,22 @@ test("reports merchant-readable errors", () => {
   });
   assert.deepEqual(errors, [
     "Give this option set a name.",
-    "Field 1 needs a label.",
-    'Two fields are labeled "size". Labels must be unique.',
+    "Question 1 (Short text) has no question text. Type the question customers will see.",
+    'Two questions are called "size". Each question needs its own wording.',
     '"_hidden" can\'t start with "_" or contain [ ].',
     '"Pick" needs at least one choice.',
     '"Shade" has a swatch without a valid color.',
   ]);
-  assert.deepEqual(validateOptionSet({}).errors, ["Give this option set a name.", "Add at least one field."]);
+  assert.deepEqual(validateOptionSet({}).errors, ["Give this option set a name.", "Add at least one question."]);
+});
+
+test("says which question and box each error belongs to", () => {
+  const { issues } = validateOptionSet({ name: "", fields: [field({ id: "a", type: "file", label: "" }), field({ id: "b", type: "select", label: "Pick", choices: [] })] });
+  assert.deepEqual(
+    issues.map(({ fieldId, input }) => [fieldId, input]),
+    [[undefined, "name"], ["a", "label"], ["b", "choices"]],
+  );
+  assert.match(issues[1].message, /^Question 1 \(File upload\)/);
 });
 
 test("keeps prices and conditions, rejects bad ones", () => {
@@ -86,10 +95,10 @@ test("keeps prices and conditions, rejects bad ones", () => {
     ],
   });
   assert.deepEqual(bad.errors, [
-    "\"Below\" depends on a field that's missing or placed below it.",
+    "\"Below\" depends on a question that's missing or placed below it.",
     "\"Later\" has a price that isn't between 0 and 100000.",
     "\"Pick\" has a price that isn't between 0 and 100000.",
-    "\"Orphan\": choose which answer shows this field.",
+    "\"Orphan\": choose which answer shows this question.",
   ]);
   assert.equal(hasPrices(validateOptionSet({ name: "Free", fields: [field()] }).data.fields), false);
 });

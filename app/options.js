@@ -234,13 +234,15 @@ const PICKED_ID = {
 // Trust boundary: the server runs this on every save. Returns cleaned data plus
 // merchant-readable errors (the editor runs it too, for instant feedback).
 export function validateOptionSet(input) {
-  const errors = [];
+  // Each issue says where it is (input, and fieldId for a question) so the editor can mark it.
+  const issues = [];
+  const fail = (message, at = {}) => issues.push({ message, ...at });
   const name = text(input?.name, 100);
-  if (!name) errors.push("Give this option set a name.");
+  if (!name) fail("Give this option set a name.", { input: "name" });
 
   const rawFields = Array.isArray(input?.fields) ? input.fields : [];
-  if (!rawFields.length) errors.push("Add at least one field.");
-  if (rawFields.length > MAX_FIELDS) errors.push(`Option sets can have up to ${MAX_FIELDS} fields.`);
+  if (!rawFields.length) fail("Add at least one question.", { input: "fields" });
+  if (rawFields.length > MAX_FIELDS) fail(`Option sets can have up to ${MAX_FIELDS} questions.`, { input: "fields" });
 
   const fields = [];
   const labels = new Set();
@@ -249,13 +251,14 @@ export function validateOptionSet(input) {
     const spec = FIELD_TYPES[type];
     const label = text(f?.label, 100);
     const field = { id: text(f?.id, 64) || crypto.randomUUID(), type, label, required: f?.required === true };
-    const ref = label ? `"${label}"` : `Field ${i + 1}`;
+    const ref = label ? `"${label}"` : `Question ${i + 1} (${spec.label})`;
+    const at = (input) => ({ fieldId: f?.id, input });
     let badPrice = false;
 
-    if (!label) errors.push(`${ref} needs a label.`);
+    if (!label) fail(`${ref} has no question text. Type the question customers will see.`, at("label"));
     // Labels become line item property names: "_" hides them and brackets break the cart form.
-    else if (/^_|[[\]]/.test(label)) errors.push(`${ref} can't start with "_" or contain [ ].`);
-    else if (labels.has(label.toLowerCase())) errors.push(`Two fields are labeled ${ref}. Labels must be unique.`);
+    else if (/^_|[[\]]/.test(label)) fail(`${ref} can't start with "_" or contain [ ].`, at("label"));
+    else if (labels.has(label.toLowerCase())) fail(`Two questions are called ${ref}. Each question needs its own wording.`, at("label"));
     labels.add(label.toLowerCase());
 
     const helpText = text(f?.helpText, 250);
@@ -282,20 +285,20 @@ export function validateOptionSet(input) {
           };
         })
         .filter((c) => c.label && !seen.has(c.label.toLowerCase()) && seen.add(c.label.toLowerCase()));
-      if (!field.choices.length) errors.push(`${ref} needs at least one choice.`);
-      if (field.choices.some((c) => c.color === "")) errors.push(`${ref} has a swatch without a valid color.`);
+      if (!field.choices.length) fail(`${ref} needs at least one choice.`, at("choices"));
+      if (field.choices.some((c) => c.color === "")) fail(`${ref} has a swatch without a valid color.`, at("choices"));
     } else {
       const price = money(f?.price);
       if (Number.isNaN(price)) badPrice = true;
       else if (price > 0) field.price = price;
     }
-    if (badPrice) errors.push(`${ref} has a price that isn't between 0 and ${MAX_PRICE}.`);
+    if (badPrice) fail(`${ref} has a price that isn't between 0 and ${MAX_PRICE}.`, at("price"));
 
     if (type === "number") {
       let min = limit(f?.min);
       let max = limit(f?.max);
       if (Number.isNaN(min) || Number.isNaN(max)) {
-        errors.push(`${ref} needs lowest and highest allowed numbers between -${MAX_LIMIT} and ${MAX_LIMIT}.`);
+        fail(`${ref} needs lowest and highest allowed numbers between -${MAX_LIMIT} and ${MAX_LIMIT}.`, at("limits"));
       }
       // Keep whichever limit is valid, so one typo doesn't trigger follow-on errors.
       if (Number.isNaN(min)) min = null;
@@ -305,7 +308,7 @@ export function validateOptionSet(input) {
         if (min !== null) min = Math.ceil(min);
         if (max !== null) max = Math.floor(max);
       }
-      if (min !== null && max !== null && min > max) errors.push(`${ref}: the lowest allowed number can't be more than the highest.`);
+      if (min !== null && max !== null && min > max) fail(`${ref}: the lowest allowed number can't be more than the highest.`, at("limits"));
       if (min !== null) field.min = min;
       if (max !== null) field.max = max;
       const unit = text(f?.unit, 30);
@@ -324,8 +327,8 @@ export function validateOptionSet(input) {
       const parent = fields.find((p) => p.id === f.condition.fieldId);
       const answers = parent ? answersOf(parent) : [];
       const values = (Array.isArray(f.condition.values) ? f.condition.values : []).filter((v) => answers.includes(v));
-      if (!answers.length) errors.push(`${ref} depends on a field that's missing or placed below it.`);
-      else if (!values.length) errors.push(`${ref}: choose which answer shows this field.`);
+      if (!answers.length) fail(`${ref} depends on a question that's missing or placed below it.`, at("condition"));
+      else if (!values.length) fail(`${ref}: choose which answer shows this question.`, at("condition"));
       else field.condition = { fieldId: parent.id, values };
     }
     fields.push(field);
@@ -334,35 +337,37 @@ export function validateOptionSet(input) {
   // A multiplier must be a number field of this set with both limits: a ceiling (no accidental
   // 1,000,000 × price) and a floor of 0 or more, which a blank answer counts as (so leaving
   // it empty can't silently make per-unit prices free). It may sit anywhere in the form.
-  const multiplierIssues = new Set();
+  const multiplierIssues = new Map(); // message -> issue, so a shared multiplier is reported once
+  const once = (message, fieldId, input) => multiplierIssues.set(message, { message, fieldId, input });
   for (const field of fields.filter((f) => f.per)) {
     const target = fields.find((t) => t.id === field.per);
     if (target?.type !== "number") {
-      multiplierIssues.add(`"${field.label}" is charged for each unit of a number field that no longer exists.`);
+      once(`"${field.label}" is charged for each unit of a number field that no longer exists.`, field.id, "price");
       continue;
     }
     if (target.min === undefined || target.max === undefined) {
-      multiplierIssues.add(`"${target.label}" needs a lowest and highest allowed number, because prices are multiplied by it.`);
+      once(`"${target.label}" needs a lowest and highest allowed number, because prices are multiplied by it.`, target.id, "limits");
     }
-    if (target.min < 0) multiplierIssues.add(`"${target.label}" can't go below 0, because prices are multiplied by it.`);
+    if (target.min < 0) once(`"${target.label}" can't go below 0, because prices are multiplied by it.`, target.id, "limits");
   }
-  errors.push(...multiplierIssues);
+  issues.push(...multiplierIssues.values());
 
-  const rules = cleanRules(input?.rules, errors);
+  const rules = cleanRules(input?.rules, (message) => fail(message, { input: "products" }));
   // Hand-picked products only count for hand-picked sets.
   const productIds =
     rules.mode === "manual"
       ? [...new Set((Array.isArray(input?.productIds) ? input.productIds : []).filter((id) => PRODUCT_GID.test(id)))]
       : [];
-  if (productIds.length > MAX_PRODUCTS) errors.push(`Option sets can be assigned to up to ${MAX_PRODUCTS} products.`);
+  if (productIds.length > MAX_PRODUCTS) fail(`Option sets can be assigned to up to ${MAX_PRODUCTS} products.`, { input: "products" });
 
   return {
-    errors,
+    errors: issues.map((i) => i.message),
+    issues,
     data: { name, status: input?.status === "DRAFT" ? "DRAFT" : "ACTIVE", fields, rules, productIds },
   };
 }
 
-function cleanRules(input, errors) {
+function cleanRules(input, fail) {
   const mode = Object.hasOwn(ASSIGN_MODES, input?.mode) ? input.mode : "manual";
   const raw = mode === "match" && Array.isArray(input?.conditions) ? input.conditions : [];
   const conditions = raw.slice(0, MAX_CONDITIONS).map((c) => {
@@ -377,9 +382,9 @@ function cleanRules(input, errors) {
     return { field, op, value, label, kind: Object.hasOwn(CATALOG_KINDS, c?.kind) ? c.kind : "region" };
   });
   if (mode === "match") {
-    if (!conditions.length) errors.push("Add a condition, or choose another way to pick products.");
-    if (raw.length > MAX_CONDITIONS) errors.push(`Use up to ${MAX_CONDITIONS} conditions.`);
-    if (conditions.some((c) => !c.value)) errors.push("Every condition needs a value: type one, or choose one from the list.");
+    if (!conditions.length) fail("Add a condition, or choose another way to pick products.");
+    if (raw.length > MAX_CONDITIONS) fail(`Use up to ${MAX_CONDITIONS} conditions.`);
+    if (conditions.some((c) => !c.value)) fail("Every condition needs a value: type one, or choose one from the list.");
   }
   return { mode, match: input?.match === "any" ? "any" : "all", conditions };
 }

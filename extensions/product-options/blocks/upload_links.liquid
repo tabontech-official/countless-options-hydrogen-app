@@ -1,0 +1,18 @@
+{%- comment -%}
+  App embed (Online Store → Themes → Customize → App embeds → Upload links). Uploaded files show
+  in the cart as "View image file"; product-options-links.js turns that into a link to the file.
+{%- endcomment -%}
+<script
+  src="{{ 'product-options-links.js' | asset_url }}"
+  data-view-image="{{ 'product_options.view_image' | t | escape }}"
+  data-view-file="{{ 'product_options.view_file' | t | escape }}"
+  defer
+></script>
+
+{% schema %}
+{
+  "name": "Upload links",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}

@@ -31,13 +31,13 @@
                 "merchandiseId": "gid://shopify/ProductVariant/1",
                 "quantity": 1,
                 "price": { "adjustment": { "fixedPricePerUnit": { "amount": "150.0" } } },
-                "attributes": [{ "key": "Gift box", "value": "Yes" }]
+                "attributes": [{ "key": "_Gift box", "value": "Yes" }]
               },
               {
                 "merchandiseId": "gid://shopify/ProductVariant/999",
                 "quantity": 1,
                 "price": { "adjustment": { "fixedPricePerUnit": { "amount": "4.95" } } },
-                "attributes": [{ "key": "Gift box", "value": "Yes (+4.95 EUR)" }]
+                "attributes": [{ "key": "_Gift box", "value": "Yes (+4.95 EUR)" }]
               }
             ]
           }

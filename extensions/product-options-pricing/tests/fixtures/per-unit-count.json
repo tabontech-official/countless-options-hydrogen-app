@@ -356,11 +356,11 @@
                 },
                 "attributes": [
                   {
-                    "key": "Diamond teeth",
+                    "key": "_Diamond teeth",
                     "value": "Yes"
                   },
                   {
-                    "key": "Number of diamond teeth",
+                    "key": "_Number of diamond teeth",
                     "value": "4"
                   }
                 ]
@@ -377,7 +377,7 @@
                 },
                 "attributes": [
                   {
-                    "key": "Number of diamond teeth",
+                    "key": "_Number of diamond teeth",
                     "value": "4 × 50.00 (+200.00 USD)"
                   }
                 ]
@@ -401,11 +401,11 @@
                 },
                 "attributes": [
                   {
-                    "key": "Diamond teeth",
+                    "key": "_Diamond teeth",
                     "value": "Yes"
                   },
                   {
-                    "key": "Number of diamond teeth",
+                    "key": "_Number of diamond teeth",
                     "value": "1"
                   }
                 ]
@@ -422,7 +422,7 @@
                 },
                 "attributes": [
                   {
-                    "key": "Number of diamond teeth",
+                    "key": "_Number of diamond teeth",
                     "value": "1 × 50.00 (+50.00 USD)"
                   }
                 ]
@@ -446,11 +446,11 @@
                 },
                 "attributes": [
                   {
-                    "key": "Diamond teeth",
+                    "key": "_Diamond teeth",
                     "value": "Yes"
                   },
                   {
-                    "key": "Number of diamond teeth",
+                    "key": "_Number of diamond teeth",
                     "value": "32"
                   }
                 ]
@@ -467,7 +467,7 @@
                 },
                 "attributes": [
                   {
-                    "key": "Number of diamond teeth",
+                    "key": "_Number of diamond teeth",
                     "value": "32 × 50.00 (+1600.00 USD)"
                   }
                 ]
@@ -491,11 +491,11 @@
                 },
                 "attributes": [
                   {
-                    "key": "Diamond teeth",
+                    "key": "_Diamond teeth",
                     "value": "Yes"
                   },
                   {
-                    "key": "Number of diamond teeth",
+                    "key": "_Number of diamond teeth",
                     "value": "3"
                   }
                 ]
@@ -512,7 +512,7 @@
                 },
                 "attributes": [
                   {
-                    "key": "Number of diamond teeth",
+                    "key": "_Number of diamond teeth",
                     "value": "3 × 50.00 (+150.00 USD)"
                   }
                 ]

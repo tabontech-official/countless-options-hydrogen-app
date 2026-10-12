@@ -114,8 +114,8 @@ export const action = async ({ request, params }) => {
     return { toast: "Store updated" };
   }
 
-  const { errors, data } = validateOptionSet(body);
-  if (errors.length) return { errors };
+  const { issues, data } = validateOptionSet(body);
+  if (issues.length) return { issues };
 
   // Turn on charging before prices go live, so customers never see a price that isn't charged.
   if (data.status === "ACTIVE" && hasPrices(data.fields)) {
@@ -171,7 +171,7 @@ export default function OptionSetPage() {
       key={`${set.id}-${set.updatedAt}`}
       set={set}
       currency={currency}
-      serverErrors={actionData?.errors ?? []}
+      serverIssues={actionData?.issues ?? (actionData?.errors ?? []).map((message) => ({ message }))}
       unsynced={actionData ? Boolean(actionData.unsynced) : unsynced}
     />
   );
@@ -179,7 +179,7 @@ export default function OptionSetPage() {
 
 const snapshot = (d) => JSON.stringify([d.name, d.status, d.fields, d.products.map((p) => p.id), d.rules]);
 
-function Editor({ set, currency, serverErrors, unsynced }) {
+function Editor({ set, currency, serverIssues, unsynced }) {
   const shopify = useAppBridge();
   const formatMoney = useMemo(() => {
     const format = new Intl.NumberFormat("en-US", { style: "currency", currency });
@@ -194,29 +194,51 @@ function Editor({ set, currency, serverErrors, unsynced }) {
   const [draft, setDraft] = useState(initial);
   const [openId, setOpenId] = useState(null);
   const [picking, setPicking] = useState(false);
-  const [clientErrors, setClientErrors] = useState([]);
+  const [clientIssues, setClientIssues] = useState([]);
+  const [jump, setJump] = useState(null);
 
   const isNew = !set.id;
   const dirty = snapshot(draft) !== snapshot(initial);
   const saving = navigation.state === "submitting";
   const deleting = navigation.state !== "idle" && navigation.json?.intent === "delete";
-  const errors = clientErrors.length ? clientErrors : serverErrors;
+  const issues = clientIssues.length ? clientIssues : serverIssues;
+  const issuesOf = (fieldId) => issues.filter((i) => i.fieldId === fieldId);
 
   const update = (patch) => setDraft((d) => ({ ...d, ...patch }));
   const setFields = (fn) => setDraft((d) => ({ ...d, fields: fn(d.fields) }));
   const updateField = (id, patch) => setFields((fs) => patchField(fs, id, patch));
   const post = (body) => submit(body, { method: "post", encType: "application/json" });
 
-  const save = () => {
-    const payload = { ...draft, productIds: draft.products.map((p) => p.id) };
-    const { errors } = validateOptionSet(payload);
-    setClientErrors(errors);
-    if (!errors.length) post(payload);
+  const payloadOf = (d) => ({ ...d, productIds: d.products.map((p) => p.id) });
+  // Opens the question an issue is about and scrolls to it (after it has rendered).
+  const goTo = (issue) => {
+    if (issue.fieldId) setOpenId(issue.fieldId);
+    setJump({ ...issue });
   };
+  useEffect(() => {
+    if (!jump) return;
+    const card = { name: "01", fields: "02", products: "03" }[jump.input] ?? "01";
+    const target = document.getElementById(jump.fieldId ? `co-q-${jump.fieldId}` : `co-card-${card}`);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (jump.input === "label" || jump.input === "name") target?.querySelector("s-text-field")?.focus?.();
+  }, [jump]);
+
+  const save = () => {
+    const { issues } = validateOptionSet(payloadOf(draft));
+    setClientIssues(issues);
+    if (issues.length) goTo(issues[0]);
+    else post(payloadOf(draft));
+  };
+  // Once a save was refused, the errors update (and disappear) as the merchant fixes them.
+  const refused = clientIssues.length > 0;
+  useEffect(() => {
+    if (refused) setClientIssues(validateOptionSet(payloadOf(draft)).issues);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, refused]);
 
   const discard = () => {
     setDraft(initial);
-    setClientErrors([]);
+    setClientIssues([]);
     setOpenId(null);
   };
 
@@ -336,11 +358,14 @@ function Editor({ set, currency, serverErrors, unsynced }) {
           <h1 className="co-heading">{draft.name.trim() || "Untitled option set"}</h1>
         </header>
 
-        {errors.length > 0 && (
-          <s-banner tone="critical" heading={`Fix ${plural(errors.length, "issue")} before saving`}>
+        {issues.length > 0 && (
+          <s-banner tone="critical" heading={`Fix ${plural(issues.length, "issue")} before saving`}>
             <s-unordered-list>
-              {errors.map((error) => (
-                <s-list-item key={error}>{error}</s-list-item>
+              {issues.map((issue) => (
+                <s-list-item key={issue.message}>
+                  {issue.message}{" "}
+                  {(issue.fieldId || issue.input) && <s-link onClick={() => goTo(issue)}>{issue.fieldId ? "Show question" : "Show"}</s-link>}
+                </s-list-item>
               ))}
             </s-unordered-list>
           </s-banner>
@@ -360,6 +385,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
               <s-text-field
                 label="Name"
                 value={draft.name}
+                error={issues.find((i) => i.input === "name")?.message}
                 placeholder="e.g. Engraving options"
                 onInput={(e) => update({ name: e.currentTarget.value })}
               />
@@ -397,6 +423,7 @@ function Editor({ set, currency, serverErrors, unsynced }) {
                         formatMoney={formatMoney}
                         followUp={depth.get(field.id) > 0}
                         open={openId === field.id}
+                        issues={issuesOf(field.id)}
                         onToggle={() => setOpenId(openId === field.id ? null : field.id)}
                         onChange={(patch) => updateField(field.id, patch)}
                         onChangeType={(type) => changeType(field, type)}
@@ -1086,7 +1113,7 @@ function MatchCount({ rules, refresh, title, note }) {
 // A glass card with the dashboard's numbered heading ("01  Details"), a hint and an optional count.
 function EditorCard({ num, title, hint, aside, children }) {
   return (
-    <section className="co-glass co-card co-editcard">
+    <section className="co-glass co-card co-editcard" id={num && `co-card-${num}`}>
       <header className="co-cardhead">
         {num && <span className="co-cardhead__num co-mono">{num}</span>}
         <h2>{title}</h2>
@@ -1181,7 +1208,7 @@ function placeAfterGroup(fields, id, anchorId) {
   return [...rest.slice(0, at), ...fields.slice(index, end), ...rest.slice(at)];
 }
 
-function FieldCard({ field, fields, formatMoney, followUp, open, onToggle, onChange, onChangeType, onDuplicate, onAddFollowUp, onRemove, onDragStart, onDragEnd }) {
+function FieldCard({ field, fields, formatMoney, followUp, open, issues, onToggle, onChange, onChangeType, onDuplicate, onAddFollowUp, onRemove, onDragStart, onDragEnd }) {
   const spec = FIELD_TYPES[field.type];
   const parent = field.condition && fields.find((f) => f.id === field.condition.fieldId);
   const per = field.per && fields.find((f) => f.id === field.per);
@@ -1196,9 +1223,11 @@ function FieldCard({ field, fields, formatMoney, followUp, open, onToggle, onCha
     .filter(Boolean)
     .join(" · ");
   const menuId = `field-menu-${field.id}`;
+  // Other questions only show for some of this one's answers.
+  const conditional = fields.some((f) => f.condition?.fieldId === field.id);
 
   return (
-    <div className={`co-q${open ? " is-open" : ""}${followUp ? " co-q--follow" : ""}`}>
+    <div id={`co-q-${field.id}`} className={`co-q${open ? " is-open" : ""}${followUp ? " co-q--follow" : ""}${issues.length ? " co-q--error" : ""}`}>
       <div className="co-q__head">
         <span className="co-q__grip" draggable title="Drag to reorder" aria-hidden="true" onDragStart={onDragStart} onDragEnd={onDragEnd}>
           <s-icon type="drag-handle" />
@@ -1207,8 +1236,11 @@ function FieldCard({ field, fields, formatMoney, followUp, open, onToggle, onCha
           <s-icon type={spec.icon} />
         </span>
         <button type="button" className="co-q__title" aria-expanded={open} onClick={onToggle}>
-          <strong>{field.label || "Untitled field"}</strong>
-          <small>{summary}</small>
+          <span className="co-q__name">
+            <strong>{field.label || "Untitled field"}</strong>
+            {conditional && <s-badge tone="info">Conditional</s-badge>}
+          </span>
+          {issues.length > 0 ? <small className="co-q__issue">{plural(issues.length, "issue")} to fix · {summary}</small> : <small>{summary}</small>}
         </button>
         <span className="co-q__actions">
           <s-button variant="tertiary" icon="menu-vertical" accessibilityLabel="More actions" commandFor={menuId} />
@@ -1232,6 +1264,7 @@ function FieldCard({ field, fields, formatMoney, followUp, open, onToggle, onCha
         <div className="co-q__body">
           <FieldSettings
             field={field}
+            issues={issues}
             // Any other question except its own follow-ups (that would loop); picking one
             // moves this field under it.
             candidates={fields.filter((f) => f.id !== field.id && !isUnder(fields, f, field.id))}
@@ -1247,7 +1280,7 @@ function FieldCard({ field, fields, formatMoney, followUp, open, onToggle, onCha
 
 const TWO_COLUMNS = "@container (inline-size > 500px) 1fr 1fr, 1fr";
 
-function FieldSettings({ field, candidates, numberFields, onChange, onChangeType }) {
+function FieldSettings({ field, issues, candidates, numberFields, onChange, onChangeType }) {
   const spec = FIELD_TYPES[field.type];
   const set = (key) => (e) => onChange({ [key]: e.currentTarget.value });
   const isNumber = field.type === "number";
@@ -1274,11 +1307,26 @@ function FieldSettings({ field, candidates, numberFields, onChange, onChangeType
           ? "Price when uploaded"
           : "Price when filled in";
 
+  // The Question box shows its own error; anything else is listed above the settings.
+  const labelIssue = issues.find((i) => i.input === "label");
+  const otherIssues = issues.filter((i) => i !== labelIssue);
+
   return (
     <s-query-container>
       <s-stack gap="base">
+        {otherIssues.map((issue) => (
+          <s-text key={issue.message} tone="critical">
+            {issue.message}
+          </s-text>
+        ))}
         <s-grid gridTemplateColumns="@container (inline-size > 500px) 2fr 1fr, 1fr" gap="base">
-          <s-text-field label="Question" value={field.label} placeholder="e.g. Metal type" onInput={set("label")} />
+          <s-text-field
+            label="Question"
+            value={field.label}
+            error={labelIssue && (field.label.trim() ? labelIssue.message : "Type the question customers will see.")}
+            placeholder="e.g. Metal type"
+            onInput={set("label")}
+          />
           <s-select label="Answer type" value={field.type} onChange={(e) => onChangeType(e.currentTarget.value)}>
             {Object.entries(FIELD_TYPES).map(([type, t]) => (
               <s-option key={type} value={type}>
@@ -1331,7 +1379,7 @@ function FieldSettings({ field, candidates, numberFields, onChange, onChangeType
         )}
 
         <s-switch
-          label="Depends on another answer"
+          label="Apply Condition"
           details={
             parents.length
               ? "Only shown, and only charged, when the customer picks a matching answer above."
@@ -1409,7 +1457,7 @@ function ChoicesEditor({ field, onChange }) {
             <s-money-field
               label={`Price for choice ${i + 1}`}
               labelAccessibilityVisibility="exclusive"
-              placeholder="Free"
+              placeholder="Default Price"
               min={0}
               max={MAX_PRICE}
               value={choice.price == null ? "" : String(choice.price)}

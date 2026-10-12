@@ -81,7 +81,8 @@ const GUIDES = [
       },
       {
         title: "File uploads",
-        text: `Customers can upload images, PDFs and Word, Excel, PowerPoint or text files up to ${MB} MB. Files are saved in Content → Files and linked on the order.`,
+        text: `Customers can upload images, PDFs and Word, Excel, PowerPoint or text files up to ${MB} MB. Files are saved in Content → Files and linked on the order. Cart and checkout show "View image file" (or "View uploaded file" for documents) instead of the long link.`,
+        tip: "To make it a link in the cart, turn on Upload links in Online Store → Themes → Customize → App embeds.",
       },
     ],
   },
@@ -91,7 +92,7 @@ const GUIDES = [
     articles: [
       {
         title: "Customers' answers",
-        text: "Open the order in Shopify admin. Answers are listed under the product, and uploaded files are links.",
+        text: "Open the order in Shopify admin. Answers are listed under the product, and uploaded files are links. The copies starting with _ are for you; customers don't see them.",
       },
       {
         title: "Option charges",

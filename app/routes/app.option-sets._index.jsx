@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Link, useLoaderData } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, useFetcher, useLoaderData } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { listOptionSets } from "../options.server";
@@ -22,6 +23,28 @@ export default function OptionSets() {
   const { sets } = useLoaderData();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
+  const shopify = useAppBridge();
+
+  // Delete from the list: the editor's own delete action (it takes the options off the
+  // products first), sent from a fetcher so the page stays put.
+  const [doomed, setDoomed] = useState(null);
+  const remover = useFetcher();
+  const deleting = remover.state !== "idle";
+  const remove = () =>
+    remover.submit({ intent: "delete" }, { method: "post", action: `/app/option-sets/${doomed.id}`, encType: "application/json" });
+  // Once the delete and the list reload finish: close the card and say how it went.
+  const wasDeleting = useRef(false);
+  const stillThere = Boolean(doomed && sets.some((s) => s.id === doomed.id));
+  useEffect(() => {
+    if (deleting) {
+      wasDeleting.current = true;
+      return;
+    }
+    if (!wasDeleting.current) return;
+    wasDeleting.current = false;
+    document.getElementById("delete-set-modal")?.hideOverlay?.();
+    shopify.toast.show(stillThere ? "Couldn't delete the option set. Try again." : "Option set deleted", { isError: stillThere });
+  }, [deleting, stillThere, shopify]);
 
   // ponytail: filtered in the browser; every set is already loaded for the list.
   const needle = query.trim().toLowerCase();
@@ -54,6 +77,8 @@ export default function OptionSets() {
         {sets.length ? (
           <OptionSetsTable
             sets={shown}
+            deleteModal="delete-set-modal"
+            onDelete={setDoomed}
             toolbar={
               <>
                 <div className="co-tabs" role="tablist" aria-label="Status">
@@ -87,6 +112,26 @@ export default function OptionSets() {
           <EmptyState />
         )}
       </div>
+
+      <s-modal id="delete-set-modal" heading="Delete option set?">
+        <s-paragraph>
+          {doomed &&
+            `"${doomed.name}" will be removed from ${plural(doomed.productCount, "product")}. Customers won't see its questions anymore. This can't be undone.`}
+        </s-paragraph>
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          tone="critical"
+          loading={deleting ? "" : undefined}
+          disabled={deleting}
+          onClick={remove}
+        >
+          Delete
+        </s-button>
+        <s-button slot="secondary-actions" commandFor="delete-set-modal" command="--hide" disabled={deleting}>
+          Cancel
+        </s-button>
+      </s-modal>
     </s-page>
   );
 }

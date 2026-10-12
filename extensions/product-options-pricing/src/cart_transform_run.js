@@ -49,17 +49,18 @@ export function cartTransformRun(input) {
             merchandiseId: line.merchandise.id,
             quantity: 1,
             price: { adjustment: { fixedPricePerUnit: { amount } } },
-            // Keeps the customer's choices on the product's order line.
-            attributes: display.map(({ label, value }) => ({ key: label, value })),
+            // Keeps the customer's choices on the product's order line. "_" hides them in
+            // checkout, which already lists them on the line itself; the admin order still shows them.
+            attributes: display.map(({ label, value }) => ({ key: `_${label}`, value })),
           },
           {
             merchandiseId: addonVariantId,
             quantity: 1,
             price: { adjustment: { fixedPricePerUnit: { amount: money(total) } } },
-            // What was charged, shown on the add-on's order line.
+            // What was charged, on the add-on's order line (hidden in checkout like the above).
             // e.g. "Gold, 3 × 50.00 (+150.00 USD)", or "3 × 50.00 (...)" when a count prices itself.
             attributes: charges.map(({ label, value, price, each, units, self }) => ({
-              key: label,
+              key: `_${label}`,
               value: `${each === undefined ? value : `${self ? "" : `${value}, `}${units} × ${money(each)}`} (+${money(price)} ${currencyCode})`,
             })),
           },

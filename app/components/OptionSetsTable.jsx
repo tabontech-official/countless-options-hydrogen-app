@@ -28,8 +28,9 @@ function Count({ n, word }) {
   );
 }
 
-// One glass card, laid out like a classic index table: filters on top, a header row, one link per row.
-export function OptionSetsTable({ sets, toolbar }) {
+// One glass card, laid out like a classic index table: filters on top, a header row, one link per row
+// plus a delete button (outside the link, which can't contain a button) that opens `deleteModal`.
+export function OptionSetsTable({ sets, toolbar, deleteModal, onDelete }) {
   return (
     <div className="co-glass co-table">
       <div className="co-table__bar">{toolbar}</div>
@@ -41,6 +42,7 @@ export function OptionSetsTable({ sets, toolbar }) {
             <span>Questions</span>
             <span>Products</span>
             <span>Updated</span>
+            <span />
           </div>
           <ul className="co-table__rows">
             {sets.map((set) => (
@@ -56,6 +58,15 @@ export function OptionSetsTable({ sets, toolbar }) {
                   <Count n={set.productCount} word="product" />
                   <span className="co-set__date">{set.updatedAt}</span>
                 </Link>
+                <s-button
+                  variant="tertiary"
+                  tone="critical"
+                  icon="delete"
+                  accessibilityLabel={`Delete ${set.name}`}
+                  commandFor={deleteModal}
+                  command="--show"
+                  onClick={() => onDelete(set)}
+                />
               </li>
             ))}
           </ul>

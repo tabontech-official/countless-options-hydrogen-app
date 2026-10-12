@@ -96,7 +96,7 @@
       }
     };
 
-    // Shopify only reads properties inside the product form: copy answers + _options there.
+    // Shopify only reads properties inside the product form: copy answers, _options, upload URLs there.
     const mirror = () => {
       const form = findForm(root);
       if (!form) return;
@@ -112,7 +112,7 @@
         picked.map(({ field, values }) => [field.dataset.poId, field.querySelector("select, [type=radio], [data-po-multi]") ? values : values[0]]),
       );
       box.replaceChildren(
-        ...picked.map(({ field, values }) => hidden(`properties[${field.dataset.poLabel}]`, values.join(", "))),
+        ...picked.flatMap(({ field: { dataset: d }, values: v }) => [hidden(`properties[${d.poLabel}]`, d.poShow ?? v.join(", ")), ...(d.poShow ? [hidden(`properties[_${d.poLabel}]`, v[0])] : [])]),
         ...(picked.length ? [hidden("properties[_options]", JSON.stringify(options))] : []),
       );
     };
