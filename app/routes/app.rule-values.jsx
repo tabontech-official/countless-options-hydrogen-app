@@ -1,6 +1,6 @@
 import { authenticate } from "../shopify.server";
 import { ADDON_TAG, MAX_PRODUCTS, isMetafieldKey } from "../options";
-import { gql, productMetafieldDefinitions } from "../options.server";
+import { gql, productMetafieldDefinitions, uploadLinksEnabled, uploadLinksUrl } from "../options.server";
 
 // POST { tag, productIds }: puts a tag on products. Shopify has no tag without a product, so this
 // is how a new tag from a condition comes to exist (the products/update webhooks that follow
@@ -39,11 +39,12 @@ export const action = async ({ request }) => {
 //   ?kind=catalog       catalogs, each with its kind (region, retail, company location, B2B, unassigned)
 //   ?kind=category&q=…  Shopify product categories matching a search
 //   ?kind=metafield     product metafield definitions a condition can check
+//   ?kind=embed         whether the "Upload links" app embed is on in the live theme
 //   ?kind=values&keys=a.b,c.d  values products already have in those metafields
 //   ?kind=entries&definition=…  the entries of a metaobject definition (a category metafield's values)
 // Channels and catalogs are offered by their publication: that's what a product is published to.
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const params = new URL(request.url).searchParams;
   const kind = params.get("kind");
   const q = params.get("q")?.trim() || null;
@@ -108,6 +109,7 @@ export const loader = async ({ request }) => {
     return { kind, options };
   }
   if (kind === "metafield") return { kind, options: await productMetafieldDefinitions(admin) };
+  if (kind === "embed") return { kind, enabled: await uploadLinksEnabled(admin), url: uploadLinksUrl(session.shop) };
   if (kind === "values") {
     // The values products already have in some text metafields, to suggest while typing.
     // ponytail: read from the 250 most recently updated products (fewer with many keys, to stay

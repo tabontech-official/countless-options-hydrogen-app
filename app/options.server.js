@@ -153,6 +153,16 @@ export async function ensurePricing(admin) {
     if (found.productVariant) return;
   }
 
+  // Reuse the add-on product from an earlier setup (the transform goes when the app is
+  // uninstalled; the product stays).
+  const existing = await gql(
+    admin,
+    `#graphql
+    query ExistingAddon { products(first: 1, query: "tag:product-options-addon") { nodes { variants(first: 1) { nodes { id } } } } }`,
+  );
+  variantId = existing.products.nodes[0]?.variants.nodes[0]?.id;
+  if (variantId) return linkAddon(admin, transform, variantId);
+
   const created = await gql(
     admin,
     `#graphql
@@ -197,7 +207,11 @@ export async function ensurePricing(admin) {
     );
     assertNoErrors(published.publishablePublish);
   }
+  await linkAddon(admin, transform, variantId);
+}
 
+// Points the cart transform at the add-on variant, creating the transform if it's missing.
+async function linkAddon(admin, transform, variantId) {
   const metafield = { namespace: "$app", key: "addon_variant", type: "single_line_text_field", value: variantId };
   if (transform) {
     const data = await gql(
@@ -224,6 +238,18 @@ export async function ensurePricing(admin) {
     );
     assertNoErrors(data.cartTransformCreate);
   }
+}
+
+// Option prices are only charged while the cart transform exists, and Shopify deletes it when the
+// app is uninstalled. Called when the admin opens, so a reinstall (or any other loss) repairs
+// itself instead of checkout quietly charging the bare product price.
+// ponytail: at most every 10 minutes per shop per server instance.
+const pricingChecked = new Map();
+export async function repairPricing(admin, shop) {
+  if (Date.now() - (pricingChecked.get(shop) ?? 0) < 10 * 60 * 1000) return;
+  pricingChecked.set(shop, Date.now());
+  const sets = await prisma.optionSet.findMany({ where: { shop, status: "ACTIVE" }, select: { fields: true } });
+  if (sets.some((s) => hasPrices(s.fields))) await ensurePricing(admin);
 }
 
 function assertNoErrors(result) {
@@ -370,6 +396,33 @@ export async function countProducts(admin) {
     query StoreProductCount { productsCount(query: "-tag:product-options-addon", limit: null) { count } }`,
   );
   return data.productsCount.count;
+}
+
+// Opens the theme editor's App embeds with "Upload links" ready to switch on.
+export const uploadLinksUrl = (shop) =>
+  `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${process.env.SHOPIFY_API_KEY}/upload_links`;
+
+// Whether the live theme has the "Upload links" embed switched on (settings_data.json lists
+// enabled app embeds under current.blocks).
+export async function uploadLinksEnabled(admin) {
+  const data = await gql(
+    admin,
+    `#graphql
+    query LiveThemeSettings {
+      themes(first: 1, roles: [MAIN]) {
+        nodes { files(filenames: ["config/settings_data.json"]) { nodes { body { ... on OnlineStoreThemeFileBodyText { content } } } } }
+      }
+    }`,
+  );
+  const content = data?.themes.nodes[0]?.files.nodes[0]?.body?.content ?? "";
+  try {
+    // Shopify starts the file with a /* … */ comment.
+    const settings = JSON.parse(content.replace(/^\s*\/\*[\s\S]*?\*\//, ""));
+    const blocks = Object.values(settings.current?.blocks ?? {});
+    return blocks.some((b) => String(b.type).includes("/blocks/upload_links/") && !b.disabled);
+  } catch {
+    return false;
+  }
 }
 
 export const themeEditorUrl = (shop) =>

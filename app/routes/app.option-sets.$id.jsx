@@ -1155,6 +1155,32 @@ function ListSelect({ label, options, value, placeholder, empty = "None in your 
   );
 }
 
+// File questions: the cart shows "View image file", which is only a link while the theme's
+// "Upload links" app embed is on. Checks again when the merchant comes back from the theme editor.
+function UploadLinksNotice() {
+  const embed = useFetcher();
+  useEffect(() => {
+    const check = () => !document.hidden && embed.load("/app/rule-values?kind=embed");
+    check();
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (!embed.data || embed.data.enabled) return null;
+  return (
+    <div className="co-newtag">
+      <span>Turn on Upload links in your theme so customers can open their file from the cart.</span>
+      <s-button variant="tertiary" icon="external" href={embed.data.url} target="_blank">
+        Turn on
+      </s-button>
+    </div>
+  );
+}
+
 // The values of a metaobject metafield (Color: Red, Blue…), loaded for the chosen definition.
 function EntrySelect({ label, definition, value, error, onPick }) {
   const entries = useFetcher();
@@ -1498,6 +1524,7 @@ function FieldSettings({ field, issues, candidates, numberFields, onChange, onCh
           </s-select>
         </s-grid>
 
+        {field.type === "file" && <UploadLinksNotice />}
         {isNumber && (
           <s-grid gridTemplateColumns={TWO_COLUMNS} gap="base">
             <s-number-field label="Lowest allowed" value={field.min == null ? "" : String(field.min)} placeholder="No limit" onInput={set("min")} />

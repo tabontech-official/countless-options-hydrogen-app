@@ -163,6 +163,13 @@
   {%- assign uploads = fields | where: 'type', 'file' -%}
   {%- if uploads.size > 0 -%}
     <script src="{{ 'product-options-upload.js' | asset_url }}" defer></script>
+    {%- comment -%} Links "View image file" in this page's cart drawer, even without the Upload links embed. {%- endcomment -%}
+    <script
+      src="{{ 'product-options-links.js' | asset_url }}"
+      data-view-image="{{ 'product_options.view_image' | t | escape }}"
+      data-view-file="{{ 'product_options.view_file' | t | escape }}"
+      defer
+    ></script>
   {%- endif -%}
 {%- elsif request.design_mode -%}
   <div class="po po--empty">{{ 'product_options.empty' | t }}</div>

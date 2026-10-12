@@ -4,7 +4,7 @@
   const cents = (n) => Math.round((Number(n) || 0) * 100);
   const el = (tag, props) => Object.assign(document.createElement(tag), props);
 
-  // Theme's add-to-cart form; skips Dawn-style hidden installments forms.
+  // Add-to-cart form, not Dawn's hidden installments one.
   function findForm(root) {
     for (const scope of [root.closest(".shopify-section"), document]) {
       const forms = [...(scope?.querySelectorAll(FORM) ?? [])].filter((f) => !f.matches('.installment, [id*="installment"]'));
@@ -96,7 +96,8 @@
       }
     };
 
-    // Shopify only reads properties inside the product form: copy answers, _options, upload URLs there.
+    // Shopify reads properties only in the product form. "Hat box (+$18.00)" is for show: the
+    // function prices from _options.
     const mirror = () => {
       const form = findForm(root);
       if (!form) return;
@@ -112,7 +113,7 @@
         picked.map(({ field, values }) => [field.dataset.poId, field.querySelector("select, [type=radio], [data-po-multi]") ? values : values[0]]),
       );
       box.replaceChildren(
-        ...picked.flatMap(({ field: { dataset: d }, values: v }) => [hidden(`properties[${d.poLabel}]`, d.poShow ?? v.join(", ")), ...(d.poShow ? [hidden(`properties[_${d.poLabel}]`, v[0])] : [])]),
+        ...picked.flatMap(({ field: { dataset: d }, values: v, price }) => [hidden(`properties[${d.poLabel}]`, (d.poShow ?? v.join(", ")) + (price ? ` (+${money(price)})` : "")), ...(d.poShow ? [hidden(`properties[_${d.poLabel}]`, v[0])] : [])]),
         ...(picked.length ? [hidden("properties[_options]", JSON.stringify(options))] : []),
       );
     };
@@ -135,7 +136,6 @@
           }),
       );
       $("[data-po-options-total]").textContent = `+${money(total)}`;
-      // Liquid variant prices are already converted.
       const base = variantPrices[variantIds.indexOf(Number(findForm(root)?.querySelector('[name="id"]')?.value))];
       $("[data-po-grand]").hidden = base == null;
       if (base != null) $("[data-po-grand-total]").textContent = format.format(base / 100 + (total / 100) * Number(rate));
@@ -152,7 +152,7 @@
         if (shown) shown.textContent = value && `: ${value}`;
         field.querySelector("[data-po-required]")?.setCustomValidity(value ? "" : root.dataset.poPickOne);
       }
-      // mirror() copies this onto the form so CSS dims its buy buttons.
+      // mirror() copies it to the form; CSS dims buy buttons.
       root.classList.toggle("po--blocked", controls.some((c) => !c.checkValidity()));
       render();
       mirror();

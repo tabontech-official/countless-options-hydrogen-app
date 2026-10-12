@@ -1,8 +1,11 @@
 // "Upload links" app embed: the cart shows an uploaded file as "View image file" (set by
 // product-options-upload.js); this turns that text into a link that opens the file in a new tab.
-// The URLs are in the line's hidden _options property, read from /cart.js. Loaded on every page,
-// for cart drawers; it does nothing until such a label is on the page.
+// The URLs are in the line's hidden _options property, read from /cart.js. Loaded on every page
+// by the embed, and by the product options block (so a product page's cart drawer works without
+// the embed); it does nothing until such a label is on the page.
 (() => {
+  if (window.poLinks) return; // the embed and the block may both load it
+  window.poLinks = true;
   const { viewImage, viewFile } = document.currentScript.dataset;
   const labels = [viewImage, viewFile];
   const FILE = /^https:\/\/cdn\.shopify\.com\/s\/files\//; // Shopify Files, as proxy.upload.jsx returns
@@ -14,7 +17,10 @@
     const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     while (walk.nextNode()) {
       const node = walk.currentNode;
-      if (labels.includes(node.data.trim()) && !node.parentElement.closest("a:not([data-po-link]), script, style")) found.push(node);
+      // "View image file", or "View image file (+$5.00)" when the upload has a price.
+      const text = node.data.trim();
+      const isLabel = labels.some((l) => text === l || text.startsWith(`${l} (+`));
+      if (isLabel && !node.parentElement.closest("a:not([data-po-link]), script, style")) found.push(node);
     }
     return found;
   };
@@ -35,15 +41,21 @@
   // shows the newest line, which /cart.js lists first), every upload in cart order.
   // ponytail: that fallback can link the wrong file if the pop-up shows a line that was merged
   // into an older one; read the /cart/add response if that matters.
+  // A control's line as an index into /cart.js items; -1 if it can't be told (a variant id that
+  // several lines share: one per upload).
+  const indexOf = (id, items) => {
+    if (id.startsWith("line:")) return id.slice(5) - 1;
+    const hits = items.flatMap((item, i) => (item.key === id || String(item.id) === id ? [i] : []));
+    return hits.length === 1 ? hits[0] : -1;
+  };
   const filesOf = (node, items) => {
     for (let row = node.parentElement; row; row = row.parentElement) {
-      const ids = new Set([...row.querySelectorAll(LINE)].map(idOf));
-      if (ids.size > 1) return null;
-      if (ids.size) {
-        const [id] = ids;
-        // A variant id can name several lines (one per upload): only use it when it's unique.
-        const hits = id.startsWith("line:") ? [items[id.slice(5) - 1]] : items.filter((i) => i.key === id || String(i.id) === id);
-        return hits.length === 1 && hits[0] ? { row, files: uploads(hits[0]) } : null;
+      // Dawn's cart page names a row twice (remove link by key, data-index by position): same line.
+      const lines = new Set([...row.querySelectorAll(LINE)].map((el) => indexOf(idOf(el), items)));
+      if (lines.size > 1 || lines.has(-1)) return null;
+      if (lines.size) {
+        const [line] = lines;
+        return items[line] ? { row, files: uploads(items[line]) } : null;
       }
     }
     return { row: document, files: items.flatMap(uploads) };
