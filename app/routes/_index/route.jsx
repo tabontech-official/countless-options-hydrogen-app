@@ -1,10 +1,8 @@
-import { redirect, useActionData } from "react-router";
-import { login } from "../../shopify.server";
-import { loginErrorMessage } from "../auth.login/error.server";
+import { redirect, useLoaderData } from "react-router";
+import { appStoreUrl } from "../../options.server";
 import { TEMPLATES } from "../../templates";
 import { Brand } from "../../components/Brand";
 import { Capabilities } from "../../components/Capabilities";
-import { InstallForm } from "../../components/InstallForm";
 import { TryIt } from "../../components/TryIt";
 // Imported (not linked) so the dashboard's styles load first and this page's layout comes after.
 import "../../styles/app.css";
@@ -17,11 +15,8 @@ export const loader = async ({ request }) => {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
-  return null;
+  return { appStoreUrl: appStoreUrl() };
 };
-
-// Same as /auth/login, so a mistyped store shows its message right here.
-export const action = async ({ request }) => loginErrorMessage(await login(request));
 
 export const meta = () => [
   { title: "Countless Options | Unlimited product options for Shopify" },
@@ -40,7 +35,7 @@ const SECTIONS = [
 ];
 
 const STEPS = [
-  ["Install the app", "Enter your store name above and approve the install in your Shopify admin."],
+  ["Install the app", "Find Countless Options on the Shopify App Store, click Install and approve it in your Shopify admin."],
   ["Create an option set", "Start from a template or from scratch, then assign it by product, collection, tag or category."],
   ["Add the block to your theme", "In the theme editor, add the Product options block to your product page. Done."],
 ];
@@ -72,10 +67,10 @@ const FAQS = [
   ],
 ];
 
-const focusInstall = () => document.getElementById("shop")?.focus();
+const showInstall = () => document.getElementById("install")?.scrollIntoView({ behavior: "smooth", block: "center" });
 
 export default function Landing() {
-  const errors = useActionData();
+  const { appStoreUrl } = useLoaderData();
 
   return (
     <div className={styles.page}>
@@ -96,7 +91,7 @@ export default function Landing() {
             </a>
           ))}
         </nav>
-        <a className="co-btn co-btn--dark co-btn--small" href="#install">
+        <a className="co-btn co-btn--dark co-btn--small" href={appStoreUrl} target="_top" rel="noopener">
           Install app
         </a>
       </header>
@@ -112,8 +107,14 @@ export default function Landing() {
               Add engraving, gift wrap, custom text, swatches and paid add-ons to any product. Prices update live on the
               product page and carry through to checkout. No variants, no code.
             </p>
-            <div id="install" className={`co-glass ${styles.install}`}>
-              <InstallForm error={errors?.shop} />
+            {/* Installs start on Shopify's own page (App Store requirement 2.3.1). */}
+            <div id="install" className={`co-actions ${styles.actions}`}>
+              <a className="co-btn co-btn--dark" href={appStoreUrl} target="_top" rel="noopener">
+                Install on Shopify →
+              </a>
+              <a className="co-btn co-btn--glass" href="#how">
+                See how it works
+              </a>
             </div>
             <ul className={styles.trust}>
               <li>Theme app block, no code edits</li>
@@ -123,7 +124,7 @@ export default function Landing() {
           </div>
 
           <div className={styles.demo}>
-            <TryIt onAddToCart={focusInstall} />
+            <TryIt onAddToCart={showInstall} />
             <span className={`co-glass ${styles.chip} ${styles.chipTop}`} aria-hidden="true">
               <i className={styles.dot} />
               Follow-up shown when ticked
@@ -206,7 +207,7 @@ export default function Landing() {
             </h2>
             <p>Set up your first option set from a template or from scratch.</p>
           </div>
-          <a className="co-btn co-btn--dark" href="#install">
+          <a className="co-btn co-btn--dark" href={appStoreUrl} target="_top" rel="noopener">
             Install app →
           </a>
         </section>

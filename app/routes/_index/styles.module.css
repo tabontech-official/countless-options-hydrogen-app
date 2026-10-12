@@ -144,12 +144,8 @@
   max-inline-size: 470px;
   font-size: 14.5px;
 }
-.install {
-  max-inline-size: 480px;
+.actions {
   margin-block-start: 26px;
-  padding: 14px 14px 12px;
-  background: var(--co-glass-strong);
-  box-shadow: var(--co-lift);
 }
 .trust {
   display: flex;

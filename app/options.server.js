@@ -434,6 +434,10 @@ export async function uploadLinksEnabled(admin) {
   }
 }
 
+// The app's App Store listing (set APP_STORE_URL once it's live); until then, a Shopify App Store
+// search that finds it. Public pages link here instead of asking for a store address.
+export const appStoreUrl = () => process.env.APP_STORE_URL || "https://apps.shopify.com/search?q=Countless%20Options";
+
 export const themeEditorUrl = (shop) =>
   `https://${shop}/admin/themes/current/editor?template=product&addAppBlockId=${process.env.SHOPIFY_API_KEY}/${BLOCK_HANDLE}&target=mainSection`;
 
