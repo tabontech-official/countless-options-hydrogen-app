@@ -40,7 +40,7 @@ export const loader = async ({ request }) => {
       )
       .then((res) => res.json())
       .then((json) => json.data.shop.name),
-    getPlan(admin, shop, back ? { maxAge: 0 } : undefined).catch(() => null),
+    getPlan(admin, shop, { maxAge: back ? 0 : 30_000 }).catch(() => null),
   ]);
 
   // Live fields only: what customers actually see on product pages.

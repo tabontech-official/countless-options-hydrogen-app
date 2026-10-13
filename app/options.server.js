@@ -116,13 +116,16 @@ export async function syncProducts(admin, shop, productIds, limit) {
     }
   }
   // Room under the limit: products outside this sync that have options use it first, then the ones
-  // here that keep theirs. A recent plan answer (30s), so a merchant who just upgraded isn't held back.
+  // here that keep theirs. Before leaving anything out, the plan is read fresh: another server may
+  // still hold the Free answer from before an upgrade.
   let room = Infinity;
   if (gaining.length) {
-    const cap = limit ?? (await productLimit(admin, shop, { maxAge: 30_000 }));
+    let cap = limit ?? (await productLimit(admin, shop, { maxAge: 30_000 }));
     if (cap !== Infinity) {
       const inSync = new Set(ids);
-      room = cap - (await productsWithOptions(shop)).filter((id) => !inSync.has(id)).length - keeping;
+      const used = (await productsWithOptions(shop)).filter((id) => !inSync.has(id)).length + keeping;
+      if (limit === undefined && used + gaining.length > cap) cap = await productLimit(admin, shop, { maxAge: 0 });
+      room = cap - used;
     }
   }
   let skipped = 0;

@@ -162,12 +162,12 @@ export const action = async ({ request, params }) => {
     const live = new Set(await productsWithOptions(shop));
     if (chosen.some((id) => !live.has(id))) {
       const total = new Set([...(await productsWithOptions(shop, { exceptSet: existing?.id })), ...chosen]).size;
-      // The plan is only asked for when the total could matter, and fresh, so a merchant who just
-      // upgraded is never refused.
+      // The plan is only asked for when the total could matter, and fresh (another server may still
+      // hold the Free answer from before an upgrade), so a merchant who just paid is never refused.
       if (total > FREE_PRODUCT_LIMIT) {
         let limit;
         try {
-          limit = await productLimit(admin, shop, { maxAge: 30_000 });
+          limit = await productLimit(admin, shop, { maxAge: 0 });
         } catch {
           return { errors: ["Couldn’t check your plan with Shopify. Try saving again in a minute."] };
         }

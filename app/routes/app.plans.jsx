@@ -34,32 +34,50 @@ export const action = async ({ request }) => {
 
   if (intent === "upgrade") {
     if (plan.unlimited) return { toast: "You’re already on Unlimited" };
-    const res = await admin.graphql(
-      `#graphql
-      query AppHandle { currentAppInstallation { app { handle } } }`,
-    );
-    const { handle } = (await res.json()).data.currentAppInstallation.app;
-    forgetPlan(shop); // read it again once they're back
-    // Throws: sends the merchant to Shopify's approval page (outside the app's frame). Development
-    // stores get a test charge, so they're never billed. Shopify adds charge_id when they come back.
-    await billing.request({
-      plan: UNLIMITED_PLAN,
-      isTest: plan.devStore,
-      returnUrl: `https://admin.shopify.com/store/${shop.replace(".myshopify.com", "")}/apps/${handle}/app`,
-    });
+    try {
+      const res = await admin.graphql(
+        `#graphql
+        query AppHandle { currentAppInstallation { app { handle } } }`,
+      );
+      const { handle } = (await res.json()).data.currentAppInstallation.app;
+      forgetPlan(shop); // read it again once they're back
+      // Throws: sends the merchant to Shopify's approval page (outside the app's frame). Development
+      // stores get a test charge, so they're never billed. Shopify adds charge_id when they come back.
+      await billing.request({
+        plan: UNLIMITED_PLAN,
+        isTest: plan.devStore,
+        returnUrl: `https://admin.shopify.com/store/${shop.replace(".myshopify.com", "")}/apps/${handle}/app`,
+      });
+    } catch (error) {
+      if (handOver(error)) throw error;
+      console.error(`[PLAN] ${shop}: couldn't start the upgrade:`, error);
+      return { error: "Shopify couldn’t open the approval page. Try again in a minute." };
+    }
   }
 
   if (intent === "downgrade") {
     if (plan.subscriptionId) {
-      // prorate: the merchant gets credit for the unused part of the month.
-      await billing.cancel({ subscriptionId: plan.subscriptionId, isTest: plan.devStore, prorate: true });
-      console.log(`[PLAN] ${shop}: moved to Free (subscription cancelled)`);
+      try {
+        // prorate: the merchant gets credit for the unused part of the month.
+        await billing.cancel({ subscriptionId: plan.subscriptionId, isTest: plan.devStore, prorate: true });
+        console.log(`[PLAN] ${shop}: moved to Free (subscription cancelled)`);
+      } catch (error) {
+        if (handOver(error)) throw error;
+        console.error(`[PLAN] ${shop}: couldn't cancel the subscription:`, error);
+        // Fine if it's gone anyway (say, a second click cancelled it first).
+        const now = await getPlan(admin, shop, { maxAge: 0 }).catch(() => null);
+        if (!now || now.unlimited) return { error: "We couldn’t switch you to Free. Try again in a minute." };
+      }
     }
     forgetPlan(shop);
     return { toast: "You’re on the Free plan now" };
   }
   return null;
 };
+
+// Responses the library throws on purpose: the redirect to Shopify's approval page and session
+// retries (401, carried by App Bridge), or a redirect. Anything else is a failure to report.
+const handOver = (error) => error instanceof Response && (error.status === 401 || (error.status >= 300 && error.status < 400));
 
 const PLANS = [
   {
