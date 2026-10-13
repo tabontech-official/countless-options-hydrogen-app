@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useActionData, useFetcher, useLoaderData, useNavigation, useSubmit } from "react-router";
+import { useActionData, useFetcher, useLoaderData, useNavigate, useNavigation, useSubmit } from "react-router";
 import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -9,6 +9,7 @@ import {
   ASSIGN_MODES,
   CATALOG_KINDS,
   FIELD_TYPES,
+  FREE_PRODUCT_LIMIT,
   MAX_CONDITIONS,
   MAX_FIELDS,
   MAX_PRICE,
@@ -27,7 +28,8 @@ import {
   METAFIELD_TYPES,
   validateOptionSet,
 } from "../options";
-import { ensurePricing, getProducts, getShopCurrency, ruleMatches, syncProducts } from "../options.server";
+import { canonical, ensurePricing, getProducts, getShopCurrency, ruleMatches, syncProducts } from "../options.server";
+import { productLimit, productsWithOptions } from "../billing.server";
 import { plural } from "../components/OptionSetsTable";
 
 // A set that's gone (deleted, a second Delete click, Back after deleting, another tab)
@@ -45,6 +47,8 @@ export const loader = async ({ request, params }) => {
   const set = await findSet(session.shop, params.id, redirect);
   const search = new URL(request.url).searchParams;
   const unsynced = search.has("unsynced");
+  // Set when a new set was saved but the Free plan left some of its products out.
+  const skipped = Number(search.get("skipped")) || 0;
   // Set when a template was just copied into this store (see app.templates.jsx).
   const created = search.has("created");
   const [currency, products] = await Promise.all([
@@ -53,10 +57,11 @@ export const loader = async ({ request, params }) => {
     getProducts(admin, set && rulesOf(set.rules).mode === "manual" ? set.products.map((p) => p.productId) : []),
   ]);
   if (!set) {
-    return { unsynced, currency, set: { id: null, name: "", status: "ACTIVE", fields: [], products: [], rules: rulesOf(), updatedAt: null } };
+    return { unsynced, skipped, currency, set: { id: null, name: "", status: "ACTIVE", fields: [], products: [], rules: rulesOf(), updatedAt: null } };
   }
   return {
     unsynced,
+    skipped,
     created,
     currency,
     set: {
@@ -111,8 +116,13 @@ export const action = async ({ request, params }) => {
   }
   if (existing && body.intent === "sync") {
     // Also searches the rules again, in case the failed sync never recorded new matches.
-    await syncProducts(admin, shop, [...reach(existing), ...(await ruleMatches(admin, existing.rules))]);
-    return { toast: "Store updated" };
+    try {
+      const skipped = await syncProducts(admin, shop, [...reach(existing), ...(await ruleMatches(admin, existing.rules)).ids]);
+      return { toast: "Store updated", skipped };
+    } catch (error) {
+      console.error(error);
+      return { unsynced: true };
+    }
   }
 
   const { issues, data } = validateOptionSet(body);
@@ -132,6 +142,50 @@ export const action = async ({ request, params }) => {
   const before = reach(existing);
   // Keeps only products that exist in this shop.
   const productIds = (await getProducts(admin, data.productIds)).map((p) => p.id);
+  let matches;
+  try {
+    matches = await ruleMatches(admin, data.rules);
+  } catch (error) {
+    console.error(error);
+    return { errors: ["Couldn’t search your products. Try saving again."] };
+  }
+
+  // Free plan: refuse a save that would add products past the plan's limit, before anything is
+  // written. Only products that don't have options yet count, so a store already past the limit
+  // (after moving down from Unlimited) can still edit, remove products or keep its rules.
+  // Rule matches count when the merchant changed the rules (or turned the set on) and Shopify's
+  // search is exact; otherwise syncProducts applies the limit product by product.
+  if (data.status === "ACTIVE") {
+    // canonical: the database hands JSON back with its keys reordered.
+    const rulesChanged = existing?.status !== "ACTIVE" || canonical(rulesOf(existing.rules)) !== canonical(rulesOf(data.rules));
+    const chosen = data.rules.mode === "manual" ? productIds : rulesChanged && matches.exact ? matches.ids : [];
+    const live = new Set(await productsWithOptions(shop));
+    if (chosen.some((id) => !live.has(id))) {
+      const total = new Set([...(await productsWithOptions(shop, { exceptSet: existing?.id })), ...chosen]).size;
+      // The plan is only asked for when the total could matter, and fresh, so a merchant who just
+      // upgraded is never refused.
+      if (total > FREE_PRODUCT_LIMIT) {
+        let limit;
+        try {
+          limit = await productLimit(admin, shop, { maxAge: 30_000 });
+        } catch {
+          return { errors: ["Couldn’t check your plan with Shopify. Try saving again in a minute."] };
+        }
+        if (total > limit) {
+          return {
+            issues: [
+              {
+                message: `The Free plan covers options on ${limit} products, and saving this would bring you to ${total.toLocaleString("en-US")}. Choose fewer products or upgrade to Unlimited.`,
+                input: "products",
+                upgrade: true,
+              },
+            ],
+          };
+        }
+      }
+    }
+  }
+
   const values = { name: data.name, status: data.status, fields: data.fields, rules: data.rules };
   const products = productIds.map((productId) => ({ productId }));
   // Hand-picked sets replace their list. Rule-based sets keep their recorded matches, and
@@ -143,18 +197,21 @@ export const action = async ({ request, params }) => {
       })
     : await prisma.optionSet.create({ data: { shop, ...values, products: { create: products } } });
 
+  let skipped;
   try {
-    await syncProducts(admin, shop, [...before, ...productIds, ...(await ruleMatches(admin, data.rules))]);
+    skipped = await syncProducts(admin, shop, [...before, ...productIds, ...matches.ids]);
   } catch (error) {
     console.error(error);
     if (!existing) return redirect(`/app/option-sets/${saved.id}?unsynced`);
     return { unsynced: true };
   }
-  return existing ? { toast: "Option set saved" } : redirect(`/app/option-sets/${saved.id}`);
+  // Products past the Free plan's limit that didn't get options (rule matches): saved, but say so.
+  if (!existing) return redirect(`/app/option-sets/${saved.id}${skipped ? `?skipped=${skipped}` : ""}`);
+  return { toast: "Option set saved", skipped };
 };
 
 export default function OptionSetPage() {
-  const { set, unsynced, created, currency } = useLoaderData();
+  const { set, unsynced, skipped, created, currency } = useLoaderData();
   const actionData = useActionData();
   const shopify = useAppBridge();
 
@@ -174,13 +231,14 @@ export default function OptionSetPage() {
       currency={currency}
       serverIssues={actionData?.issues ?? (actionData?.errors ?? []).map((message) => ({ message }))}
       unsynced={actionData ? Boolean(actionData.unsynced) : unsynced}
+      skipped={actionData ? (actionData.skipped ?? 0) : skipped}
     />
   );
 }
 
 const snapshot = (d) => JSON.stringify([d.name, d.status, d.fields, d.products.map((p) => p.id), d.rules]);
 
-function Editor({ set, currency, serverIssues, unsynced }) {
+function Editor({ set, currency, serverIssues, unsynced, skipped }) {
   const shopify = useAppBridge();
   const formatMoney = useMemo(() => {
     const format = new Intl.NumberFormat("en-US", { style: "currency", currency });
@@ -188,6 +246,12 @@ function Editor({ set, currency, serverIssues, unsynced }) {
   }, [currency]);
   const submit = useSubmit();
   const navigation = useNavigation();
+  const navigate = useNavigate();
+  // To the Plans page, after Shopify asks the merchant about unsaved edits (when the save bar is open).
+  const openPlans = async () => {
+    await shopify.saveBar.leaveConfirmation?.();
+    navigate("/app/plans");
+  };
   const initial = useMemo(
     () => ({ name: set.name, status: set.status, fields: set.fields, products: set.products, rules: set.rules }),
     [set],
@@ -370,10 +434,23 @@ function Editor({ set, currency, serverIssues, unsynced }) {
               {issues.map((issue) => (
                 <s-list-item key={issue.message}>
                   {issue.message}{" "}
-                  {(issue.fieldId || issue.input) && <s-link onClick={() => goTo(issue)}>{issue.fieldId ? "Show question" : "Show"}</s-link>}
+                  {issue.upgrade ? (
+                    <s-link onClick={openPlans}>Upgrade to Unlimited</s-link>
+                  ) : (
+                    (issue.fieldId || issue.input) && <s-link onClick={() => goTo(issue)}>{issue.fieldId ? "Show question" : "Show"}</s-link>
+                  )}
                 </s-list-item>
               ))}
             </s-unordered-list>
+          </s-banner>
+        )}
+        {skipped > 0 && (
+          <s-banner tone="warning" heading={`Saved, but ${plural(skipped, "product")} didn’t get options`}>
+            They’re past the Free plan’s {FREE_PRODUCT_LIMIT} products. Upgrade to Unlimited and every product this set
+            covers gets them.
+            <s-button slot="secondary-actions" onClick={openPlans}>
+              Upgrade to Unlimited
+            </s-button>
           </s-banner>
         )}
         {unsynced && (

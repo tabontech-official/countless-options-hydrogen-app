@@ -2,10 +2,12 @@ import "@shopify/shopify-app-react-router/adapters/node";
 import {
   ApiVersion,
   AppDistribution,
+  BillingInterval,
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { UNLIMITED_PLAN, UNLIMITED_PRICE } from "./options";
 
 const appUrl =
   process.env.SHOPIFY_APP_URL ||
@@ -31,11 +33,55 @@ class SessionStorage extends PrismaSessionStorage {
   }
 }
 
-const INSTALL_WEBHOOK_URL = "https://hook.us2.make.com/dnccut3zbkuttmef8ak5587ra6q9exqb";
+const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/dnccut3zbkuttmef8ak5587ra6q9exqb";
 // ponytail: per server instance, so a shop costs one Admin API query per server start, not per page load.
 const installChecked = new Set();
 
-// Tells the Make scenario (which emails the merchant) about a new install, once per installation.
+const SHOP_FIELDS = `
+  id name email contactEmail myshopifyDomain shopOwnerName createdAt
+  primaryDomain { host }
+  plan { publicDisplayName }
+  shopAddress { country phone }
+`;
+
+// The store details every Make event carries, plus the event's own fields.
+const makePayload = (s, fields) => ({
+  app_name: "Countless Options",
+  shop_id: s.id.split("/").pop(),
+  shop_name: s.name,
+  shop_email: s.email,
+  shop_phone: s.shopAddress?.phone || "Not provided",
+  shop_domain: s.myshopifyDomain,
+  domain: s.primaryDomain?.host,
+  plan_name: s.plan?.publicDisplayName,
+  country: s.shopAddress?.country,
+  shop_owner: s.shopOwnerName,
+  customer_email: s.contactEmail,
+  created_at: new Date(s.createdAt).toLocaleString("en-US", { timeZone: "UTC", dateStyle: "long", timeStyle: "medium" }),
+  // Same fields as the other apps' events, in case the Make scenario maps them.
+  credits_before: "0",
+  credits_purchased: "N/A",
+  credits_after: "0",
+  purchase_name: "N/A",
+  purchase_status: "N/A",
+  ...fields,
+});
+
+// Posts one event to the Make scenario (which emails the merchant). Throws if Make doesn't accept it.
+async function sendToMake(tag, shop, payload) {
+  console.log(`[${tag}] ${shop}: sending to Make`, payload);
+  const res = await fetch(MAKE_WEBHOOK_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10_000), // a slow Make can't hold up the page
+  });
+  const answer = await res.text();
+  if (!res.ok) throw new Error(`Make answered ${res.status} "${answer}"`);
+  console.log(`[${tag}] ${shop}: OK, Make answered ${res.status} "${answer}"`);
+}
+
+// Tells the Make scenario about a new install, once per installation.
 // Called from afterAuth and from the admin layout loader (routes/app.jsx), so it doesn't depend on
 // a token exchange happening. The "already sent" marker is an app-data metafield on the app
 // installation, holding the installation's id: a reinstall is a new installation without it, even
@@ -45,7 +91,7 @@ export async function notifyInstall(admin, shop) {
   if (installChecked.has(shop)) return;
   installChecked.add(shop);
   try {
-    console.log(`[INSTALL] ${shop}: step 1/3 checking whether this installation was sent to Make`);
+    console.log(`[INSTALL] ${shop}: checking whether this installation was sent to Make`);
     const response = await admin.graphql(
       `#graphql
       query InstallShopInfo {
@@ -53,12 +99,7 @@ export async function notifyInstall(admin, shop) {
           id
           notified: metafield(namespace: "$app", key: "install_notified") { value }
         }
-        shop {
-          id name email contactEmail myshopifyDomain shopOwnerName createdAt
-          primaryDomain { host }
-          plan { publicDisplayName }
-          shopAddress { country phone }
-        }
+        shop { ${SHOP_FIELDS} }
       }`,
     );
     const { data, errors } = await response.json();
@@ -69,44 +110,7 @@ export async function notifyInstall(admin, shop) {
       console.log(`[INSTALL] ${shop}: already sent to Make for this installation. Nothing to do.`);
       return;
     }
-    console.log(`[INSTALL] ${shop}: step 1/3 OK, new install (${s.name}, ${s.email})`);
-
-    const payload = {
-      app_name: "Countless Options",
-      event: "App Installed",
-      shop_id: s.id.split("/").pop(),
-      shop_name: s.name,
-      shop_email: s.email,
-      shop_phone: s.shopAddress?.phone || "Not provided",
-      shop_domain: s.myshopifyDomain,
-      domain: s.primaryDomain?.host,
-      plan_name: s.plan?.publicDisplayName,
-      country: s.shopAddress?.country,
-      shop_owner: s.shopOwnerName,
-      customer_email: s.contactEmail,
-      created_at: new Date(s.createdAt).toLocaleString("en-US", {
-        timeZone: "UTC",
-        dateStyle: "long",
-        timeStyle: "medium",
-      }),
-      // Same fields as the other apps' installs, in case the Make scenario maps them.
-      credits_before: "0",
-      credits_purchased: "N/A",
-      credits_after: "0",
-      purchase_name: "N/A",
-      purchase_status: "N/A",
-    };
-
-    console.log(`[INSTALL] ${shop}: step 2/3 sending to Make`, payload);
-    const res = await fetch(INSTALL_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(10_000), // a slow Make can't hold up the page
-    });
-    const answer = await res.text();
-    if (!res.ok) throw new Error(`Make answered ${res.status} "${answer}"`);
-    console.log(`[INSTALL] ${shop}: step 2/3 OK, Make answered ${res.status} "${answer}"`);
+    await sendToMake("INSTALL", shop, makePayload(s, { event: "App Installed" }));
 
     // ponytail: if this step fails after Make got the data, the next try sends it to Make again.
     const marked = await admin.graphql(
@@ -120,13 +124,38 @@ export async function notifyInstall(admin, shop) {
     );
     const userErrors = (await marked.json()).data?.metafieldsSet?.userErrors;
     if (userErrors?.length) throw new Error(`could not save the "sent" marker: ${JSON.stringify(userErrors)}`);
-    console.log(`[INSTALL] ${shop}: step 3/3 OK, marked as sent. Done.`);
+    console.log(`[INSTALL] ${shop}: marked as sent. Done.`);
   } catch (error) {
     installChecked.delete(shop); // try again on the next admin page load
     console.error(`[INSTALL] ${shop}: FAILED, will try again on the next admin page load:`, error);
   }
 }
 
+// Tells the Make scenario a merchant subscribed to Unlimited (they just approved the charge).
+// Never throws: the subscription is already active, so a Make problem is only logged.
+export async function notifySubscription(admin, shop) {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+      query SubscriptionShopInfo { shop { ${SHOP_FIELDS} } }`,
+    );
+    const s = (await response.json()).data?.shop;
+    if (!s) throw new Error("no shop info from Shopify");
+    await sendToMake(
+      "SUBSCRIPTION",
+      shop,
+      makePayload(s, {
+        event: "subscription_approved",
+        purchase_name: UNLIMITED_PLAN,
+        purchase_status: "UNLIMITED PLAN ACTIVATED",
+        subscription_plan: UNLIMITED_PLAN,
+        subscription_price: `$${UNLIMITED_PRICE} / month`,
+      }),
+    );
+  } catch (error) {
+    console.error(`[SUBSCRIPTION] ${shop}: FAILED to tell Make:`, error);
+  }
+}
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -137,8 +166,13 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new SessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-
-
+  // The paid plan (Shopify's Billing API). Free needs no subscription: it's every shop's default.
+  // The Plans page (routes/app.plans.jsx) requests and cancels it; billing.server.js reads it.
+  billing: {
+    [UNLIMITED_PLAN]: {
+      lineItems: [{ amount: UNLIMITED_PRICE, currencyCode: "USD", interval: BillingInterval.Every30Days }],
+    },
+  },
   future: {
     expiringOfflineAccessTokens: true,
   },

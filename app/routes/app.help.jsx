@@ -1,7 +1,7 @@
 import { Link, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { FIELD_TYPES, MAX_UPLOAD_BYTES } from "../options";
+import { FIELD_TYPES, FREE_PRODUCT_LIMIT, MAX_UPLOAD_BYTES } from "../options";
 import { themeEditorUrl } from "../options.server";
 
 export const loader = async ({ request }) => {
@@ -52,6 +52,13 @@ const GUIDES = [
       {
         title: "Hide a set",
         text: "Change its status to Draft and save. Switch back to Active to show it again.",
+      },
+      {
+        title: "Plans",
+        text: "Change plan anytime from Plans in the menu.",
+        list: [`Free: options on up to ${FREE_PRODUCT_LIMIT} products.`, "Unlimited: options on every product."],
+        tip: "On Free, a save that would go past the limit asks you to upgrade, and products added later past it don’t get options. Upgrade and every product your option sets cover gets them. Moving back to Free never removes options.",
+        action: { label: "See plans", to: "/app/plans" },
       },
     ],
   },

@@ -18,7 +18,7 @@
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
-    "test": "node --test app/options.test.js"
+    "test": "node --test app/options.test.js && vite-node app/billing.test.js"
   },
   "type": "module",
   "engines": {

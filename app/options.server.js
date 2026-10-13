@@ -1,5 +1,6 @@
 import prisma from "./db.server";
-import { METAFIELD_TYPES, appliesTo, hasPrices, mergeFields, rulesOf, rulesQuery } from "./options";
+import { productLimit, productsWithOptions } from "./billing.server";
+import { METAFIELD_TYPES, appliesTo, hasPrices, mergeFields, rulesOf, rulesSearch } from "./options";
 
 export const BLOCK_HANDLE = "product_options";
 
@@ -12,7 +13,7 @@ const chunks = (list, size) =>
   Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size));
 
 // Key-order-insensitive JSON equality: Shopify may hand a json metafield back with its keys reordered.
-const canonical = (value) =>
+export const canonical = (value) =>
   JSON.stringify(value, (_, v) =>
     v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v,
   );
@@ -24,10 +25,17 @@ const canonical = (value) =>
 // Only products whose options actually change are written, so the products/update webhook our
 // own write triggers finds nothing to do and stops there. Rule-based sets also get their
 // matches recorded in OptionSetProduct, so a collection change knows which products to recheck.
+// The plan caps how many products may have options (billing.server.js): past it, products that
+// would get options for the first time don't; products that have them keep them. The plan is only
+// looked up when some product would get options for the first time; `limit` overrides it (tests).
+// Returns how many products were left out. Throws PlanUnknownError if the plan can't be checked,
+// so a webhook is retried and a save shows "Try again" instead of guessing.
 // ponytail: DB is written before this runs; if Shopify fails, saving again re-syncs.
-export async function syncProducts(admin, shop, productIds) {
+// ponytail: simultaneous syncs near the limit each see the same room and can pass it by a few;
+// a per-shop lock would close that if it matters.
+export async function syncProducts(admin, shop, productIds, limit) {
   const ids = [...new Set(productIds)];
-  if (!ids.length) return;
+  if (!ids.length) return 0;
   const sets = (
     await prisma.optionSet.findMany({
       where: { shop, status: "ACTIVE" },
@@ -51,6 +59,20 @@ export async function syncProducts(admin, shop, productIds) {
   const toDelete = [];
   const matched = [];
   const unmatched = [];
+  // Records which rule sets apply to a product and queues its write, if its options change.
+  const settle = (product, applying, current) => {
+    for (const s of sets.filter((s) => s.rules.mode !== "manual")) {
+      const row = { optionSetId: s.id, productId: product.id };
+      if (applying.includes(s) && !s.has.has(product.id)) matched.push(row);
+      if (!applying.includes(s) && s.has.has(product.id)) unmatched.push(row);
+    }
+    const fields = mergeFields(applying.map((s) => s.fields));
+    if (fields.length ? canonical(current) === canonical(fields) : !current) return;
+    if (fields.length) toSet.push({ ownerId: product.id, namespace: "$app", key: "options", type: "json", value: JSON.stringify(fields) });
+    else toDelete.push({ ownerId: product.id, namespace: "$app", key: "options" });
+  };
+  const gaining = []; // products getting options for the first time
+  let keeping = 0; // products here that keep theirs
   for (const batch of chunks(ids, batchSize)) {
     const data = await gql(
       admin,
@@ -84,18 +106,36 @@ export async function syncProducts(admin, shop, productIds) {
       product.publications = publications.filter((_, i) => product[`p${i}`]);
       product.metafields = Object.fromEntries(metafields.map((key, i) => [key, product[`m${i}`]?.jsonValue ?? null]));
       const applying = sets.filter((s) => (s.rules.mode === "manual" ? s.has.has(product.id) : appliesTo(s.rules, product)));
-      for (const s of sets.filter((s) => s.rules.mode !== "manual")) {
-        const row = { optionSetId: s.id, productId: product.id };
-        if (applying.includes(s) && !s.has.has(product.id)) matched.push(row);
-        if (!applying.includes(s) && s.has.has(product.id)) unmatched.push(row);
-      }
-      const fields = mergeFields(applying.map((s) => s.fields));
       const current = product.options && JSON.parse(product.options.value);
-      if (fields.length ? canonical(current) === canonical(fields) : !current) continue;
-      if (fields.length) toSet.push({ ownerId: product.id, namespace: "$app", key: "options", type: "json", value: JSON.stringify(fields) });
-      else toDelete.push({ ownerId: product.id, namespace: "$app", key: "options" });
+      const gets = mergeFields(applying.map((s) => s.fields)).length > 0;
+      if (gets && !current) gaining.push([product, applying]);
+      else {
+        if (gets) keeping++;
+        settle(product, applying, current);
+      }
     }
   }
+  // Room under the limit: products outside this sync that have options use it first, then the ones
+  // here that keep theirs. A recent plan answer (30s), so a merchant who just upgraded isn't held back.
+  let room = Infinity;
+  if (gaining.length) {
+    const cap = limit ?? (await productLimit(admin, shop, { maxAge: 30_000 }));
+    if (cap !== Infinity) {
+      const inSync = new Set(ids);
+      room = cap - (await productsWithOptions(shop)).filter((id) => !inSync.has(id)).length - keeping;
+    }
+  }
+  let skipped = 0;
+  for (const [product, applying] of gaining) {
+    if (room > 0) {
+      room--;
+      settle(product, applying, null);
+    } else {
+      skipped++;
+      settle(product, [], null); // drops any stale rule match recorded for it
+    }
+  }
+  if (skipped) console.log(`[PLAN] ${shop}: ${skipped} products didn't get options; the Free plan's limit is reached`);
 
   // Both mutations accept at most 25 metafields per call.
   for (const metafields of chunks(toSet, 25)) {
@@ -126,6 +166,7 @@ export async function syncProducts(admin, shop, productIds) {
   // Recorded only once the store is updated, so the records always describe what's live.
   if (matched.length) await prisma.optionSetProduct.createMany({ data: matched, skipDuplicates: true });
   for (const rows of chunks(unmatched, 500)) await prisma.optionSetProduct.deleteMany({ where: { OR: rows } });
+  return skipped;
 }
 
 // Option prices are charged by the cart transform function (extensions/product-options-pricing),
@@ -282,8 +323,8 @@ export async function getShopCurrency(admin) {
 export async function ruleMatches(admin, rules) {
   const usesMetafields = rulesOf(rules).conditions.some((c) => c.field === "metafield");
   const searchable = usesMetafields ? searchableKeys(await productMetafieldDefinitions(admin)) : undefined;
-  const query = rulesQuery(rules, searchable);
-  if (!query) return [];
+  const { query, exact } = rulesSearch(rules, searchable);
+  if (!query) return { ids: [], exact };
   const ids = [];
   let after = null;
   do {
@@ -301,7 +342,20 @@ export async function ruleMatches(admin, rules) {
     ids.push(...data.products.nodes.map((p) => p.id));
     after = data.products.pageInfo.hasNextPage ? data.products.pageInfo.endCursor : null;
   } while (after);
-  return ids;
+  // exact: false when Shopify can't search on a condition's metafield, so `ids` has extra products.
+  return { ids, exact };
+}
+
+// Re-applies every active option set, e.g. after an upgrade, so products the Free plan left out get options.
+export async function applyAllSets(admin, shop) {
+  const sets = await prisma.optionSet.findMany({
+    where: { shop, status: "ACTIVE" },
+    select: { rules: true, products: { select: { productId: true } } },
+  });
+  const ids = sets.flatMap((s) => s.products.map((p) => p.productId));
+  for (const s of sets) ids.push(...(await ruleMatches(admin, s.rules)).ids);
+  // Fresh: another server may still hold the Free answer from just before the upgrade.
+  return syncProducts(admin, shop, ids, await productLimit(admin, shop, { maxAge: 0 }));
 }
 
 // The store's product metafield definitions (not an app's own "app--" namespace). Types a

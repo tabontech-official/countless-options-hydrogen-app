@@ -12,6 +12,8 @@ export const action = async ({ request }) => {
 
   const sets = await prisma.optionSet.findMany({ where: { shop, status: "ACTIVE" }, select: { rules: true } });
   if (sets.some((s) => rulesOf(s.rules).mode !== "manual")) {
+    // On the Free plan, a new product past the limit doesn't get options. If the plan can't be
+    // checked, syncProducts throws and Shopify retries the webhook later.
     await syncProducts(admin, shop, [payload.admin_graphql_api_id]);
   }
   return new Response();

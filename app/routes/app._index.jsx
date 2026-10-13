@@ -1,22 +1,27 @@
-import { Link, useLoaderData } from "react-router";
+import { useEffect, useRef } from "react";
+import { Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
+import { authenticate, notifySubscription } from "../shopify.server";
 import prisma from "../db.server";
 import { FIELD_TYPES, hasPrices } from "../options";
-import { countProducts, isBlockInTheme, themeEditorUrl } from "../options.server";
+import { applyAllSets, countProducts, isBlockInTheme, themeEditorUrl } from "../options.server";
+import { FREE_PRODUCT_LIMIT, getPlan } from "../billing.server";
 import { TEMPLATES } from "../templates";
 import { plural } from "../components/OptionSetsTable";
 import { Brand } from "../components/Brand";
 import { TryIt } from "../components/TryIt";
 import { Ring } from "../components/Ring";
 import { Capabilities } from "../components/Capabilities";
+import { PlanCard } from "../components/PlanCard";
 import { TemplateGallery } from "../components/TemplateGallery";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const { shop } = session;
-  const [latest, activeSets, draft, products, totalProducts, blockAdded, shopName] = await Promise.all([
+  // Back from approving Unlimited: Shopify adds charge_id to the return URL, so read the plan fresh.
+  const back = new URL(request.url).searchParams.has("charge_id");
+  const [latest, activeSets, draft, products, totalProducts, blockAdded, shopName, plan] = await Promise.all([
     prisma.optionSet.findFirst({ where: { shop }, orderBy: { updatedAt: "desc" }, select: { id: true } }),
     prisma.optionSet.findMany({ where: { shop, status: "ACTIVE" }, select: { fields: true } }),
     prisma.optionSet.count({ where: { shop, status: "DRAFT" } }),
@@ -35,6 +40,7 @@ export const loader = async ({ request }) => {
       )
       .then((res) => res.json())
       .then((json) => json.data.shop.name),
+    getPlan(admin, shop, back ? { maxAge: 0 } : undefined).catch(() => null),
   ]);
 
   // Live fields only: what customers actually see on product pages.
@@ -54,6 +60,10 @@ export const loader = async ({ request }) => {
     pricedCount: fields.filter((f) => hasPrices([f])).length,
     typeCounts: Object.fromEntries(byType),
     blockAdded,
+    // Free plan only: the product allowance (billing.server.js). Hidden when the plan can't be checked.
+    limit: plan && !plan.unlimited ? FREE_PRODUCT_LIMIT : null,
+    // Just upgraded: the page asks the action to tell Make and re-apply every set (products Free left out).
+    upgraded: back && Boolean(plan?.unlimited),
     themeEditorUrl: themeEditorUrl(shop),
     // Optional: set SUPPORT_EMAIL in .env to show the support line at the bottom.
     // eslint-disable-next-line no-undef
@@ -61,10 +71,47 @@ export const loader = async ({ request }) => {
   };
 };
 
+// Just upgraded (checked again here, not trusted from the page): tell the Make scenario, then apply
+// every active set again, so products the Free plan left out get options.
+export const action = async ({ request }) => {
+  const { admin, session } = await authenticate.admin(request);
+  const { shop } = session;
+  try {
+    const plan = await getPlan(admin, shop, { maxAge: 0 });
+    if (!plan.unlimited) return null;
+    await notifySubscription(admin, shop);
+    // applied: false when products were still left out, so the page says so instead of claiming success.
+    return { applied: (await applyAllSets(admin, shop)) === 0 };
+  } catch (error) {
+    console.error(error);
+    return { applied: false };
+  }
+};
+
 const number = new Intl.NumberFormat("en-US");
 
 export default function Dashboard() {
   const data = useLoaderData();
+  const shopify = useAppBridge();
+  const applying = useFetcher();
+  const asked = useRef(false);
+  const [, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (!data.upgraded || asked.current) return;
+    asked.current = true;
+    applying.submit({}, { method: "post" });
+    // Once is enough: without charge_id, a reload or Back doesn't run it again.
+    setSearchParams(
+      (params) => {
+        params.delete("charge_id");
+        return params;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [data.upgraded, applying, setSearchParams]);
+  useEffect(() => {
+    if (applying.data?.applied) shopify.toast.show("Unlimited is on. Every product your option sets cover has options.");
+  }, [applying.data, shopify]);
   const { active, draft, productCount, blockAdded, latestId } = data;
   const hasSets = active + draft > 0;
 
@@ -93,9 +140,26 @@ export default function Dashboard() {
   return (
     <s-page heading="Dashboard" inlineSize="large">
       <div className="co-wrap co-animate">
+        {applying.state !== "idle" && (
+          <s-banner tone="info" heading="Unlimited is on">
+            Adding options to every product your option sets cover…
+          </s-banner>
+        )}
+        {applying.data?.applied === false && (
+          <s-banner tone="warning" heading="Unlimited is on, but some products weren’t updated">
+            Open an option set and save it to add its options to every product.
+          </s-banner>
+        )}
         <Hero data={data} hasSets={hasSets} live={live} steps={steps} />
         {!live && <SetupSteps steps={steps} />}
         <Kpis data={data} />
+        {data.limit != null && (
+          <PlanCard used={productCount} limit={data.limit}>
+            <Link className="co-btn co-btn--dark co-btn--small" to="/app/plans">
+              Upgrade to Unlimited
+            </Link>
+          </PlanCard>
+        )}
         {hasSets && <Insights data={data} />}
 
         <section className="co-center">

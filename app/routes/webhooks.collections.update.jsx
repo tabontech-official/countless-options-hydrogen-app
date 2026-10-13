@@ -22,7 +22,7 @@ export const action = async ({ request }) => {
   if (affected.length) {
     // Only products in the collection now can have newly matched; the rest stay as recorded.
     // (Searching each set's whole rules could scan every product, e.g. "any" with a metafield.)
-    const inCollection = await ruleMatches(admin, {
+    const { ids: inCollection } = await ruleMatches(admin, {
       mode: "match",
       match: "all",
       conditions: [{ field: "collection", op: "is", value: payload.admin_graphql_api_id }],
