@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
+import { authenticate, appUrl } from "../shopify.server";
 import { forgetPlan, getPlan, productsWithOptions } from "../billing.server";
 import { FREE_PRODUCT_LIMIT, UNLIMITED_PLAN, UNLIMITED_PRICE } from "../options";
 import { PlanCard } from "../components/PlanCard";
@@ -39,15 +39,18 @@ export const action = async ({ request }) => {
       // billing.request() throws a Response to redirect to Shopify’s approval page. Development
       // stores get a test charge, so they’re never billed. The return from Shopify includes charge_id
       // and/or session restoration; from=plans marks our own knowledge of the return.
+      if (!appUrl) throw new Error("SHOPIFY_APP_URL not set. Set it in .env or via shopify app dev.");
+      const returnUrl = `${appUrl}/app?from=plans`;
+      console.log(`[PLAN] ${shop}: requesting billing for ${UNLIMITED_PLAN}, returnUrl=${returnUrl}`);
       await billing.request({
         plan: UNLIMITED_PLAN,
         isTest: plan.devStore,
-        returnUrl: new URL("/app?from=plans", `https://${request.headers.get("host")}`).toString(),
+        returnUrl,
       });
     } catch (error) {
       if (handOver(error)) throw error;
-      console.error(`[PLAN] ${shop}: couldn’t start the upgrade:`, error);
-      return { error: "Shopify couldn’t open the approval page. Try again in a minute." };
+      console.error(`[PLAN] ${shop}: couldn’t start the upgrade:`, error?.message ?? error, error?.stack);
+      return { error: `Couldn’t start upgrade: ${error?.message || "Unknown error"}. Check console logs.` };
     }
   }
 

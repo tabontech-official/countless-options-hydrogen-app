@@ -17,6 +17,9 @@ const appUrl =
       ? `https://${process.env.VERCEL_URL}`
       : "");
 
+// Export appUrl for use in routes (billing return URLs, etc)
+export { appUrl };
+
 // Shopify's Prisma storage checks the database once, when a server instance starts, and keeps
 // a failed check for that instance's whole life. On Vercel, one network blip at start-up made
 // every request on a warm instance fail with "session table does not exist" until a redeploy.
