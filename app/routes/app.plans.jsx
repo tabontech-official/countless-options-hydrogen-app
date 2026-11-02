@@ -4,7 +4,6 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { forgetPlan, getPlan, productsWithOptions } from "../billing.server";
-import { gql } from "../options.server";
 import { FREE_PRODUCT_LIMIT, UNLIMITED_PLAN, UNLIMITED_PRICE } from "../options";
 import { PlanCard } from "../components/PlanCard";
 
@@ -36,24 +35,18 @@ export const action = async ({ request }) => {
   if (intent === "upgrade") {
     if (plan.unlimited) return { toast: "You’re already on Unlimited" };
     try {
-      const { currentAppInstallation } = await gql(
-        admin,
-        `#graphql
-        query AppHandle { currentAppInstallation { app { handle } } }`,
-      );
-      const { handle } = currentAppInstallation.app;
-      forgetPlan(shop); // read it again once they're back
-      // Throws: sends the merchant to Shopify's approval page (outside the app's frame). Development
-      // stores get a test charge, so they're never billed. Shopify used to add charge_id when they come back,
-      // which the docs no longer promise, so from=plans marks the return too (our own parameter).
+      forgetPlan(shop); // read it again once they’re back
+      // billing.request() throws a Response to redirect to Shopify’s approval page. Development
+      // stores get a test charge, so they’re never billed. The return from Shopify includes charge_id
+      // and/or session restoration; from=plans marks our own knowledge of the return.
       await billing.request({
         plan: UNLIMITED_PLAN,
         isTest: plan.devStore,
-        returnUrl: `https://admin.shopify.com/store/${shop.replace(".myshopify.com", "")}/apps/${handle}/app?from=plans`,
+        returnUrl: new URL("/app?from=plans", `https://${request.headers.get("host")}`).toString(),
       });
     } catch (error) {
       if (handOver(error)) throw error;
-      console.error(`[PLAN] ${shop}: couldn't start the upgrade:`, error);
+      console.error(`[PLAN] ${shop}: couldn’t start the upgrade:`, error);
       return { error: "Shopify couldn’t open the approval page. Try again in a minute." };
     }
   }
