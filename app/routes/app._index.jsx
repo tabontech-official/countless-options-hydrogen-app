@@ -23,6 +23,7 @@ export const loader = async ({ request }) => {
   // is a backup), so read the plan fresh.
   const { search } = new URL(request.url);
   const back = search.includes("charge_id=") || search.includes("from=plans");
+  if (back) console.log(`[DASHBOARD] ${shop}: returning from billing, fetching fresh plan`);
   const [latest, activeSets, draft, products, totalProducts, blockAdded, shopName, plan] = await Promise.all([
     prisma.optionSet.findFirst({ where: { shop }, orderBy: { updatedAt: "desc" }, select: { id: true } }),
     prisma.optionSet.findMany({ where: { shop, status: "ACTIVE" }, select: { fields: true } }),
@@ -43,7 +44,15 @@ export const loader = async ({ request }) => {
     )
       .then((data) => data.shop.name)
       .catch(() => null),
-    getPlan(admin, shop, { maxAge: back ? 0 : 30_000 }).catch(() => null),
+    getPlan(admin, shop, { maxAge: back ? 0 : 30_000 })
+      .then((p) => {
+        if (back) console.log(`[DASHBOARD] ${shop}: plan after billing: ${p.unlimited ? "Unlimited" : "Free"}`);
+        return p;
+      })
+      .catch((err) => {
+        console.error(`[DASHBOARD] ${shop}: failed to fetch plan after billing:`, err?.message);
+        return null;
+      }),
   ]);
 
   // Live fields only: what customers actually see on product pages.
