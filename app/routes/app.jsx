@@ -15,14 +15,14 @@ export const loader = async ({ request }) => {
   await notifyInstall(admin, session.shop);
 
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", shop: session.shop };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData();
+  const { apiKey, shop } = useLoaderData();
 
   return (
-    <AppProvider embedded apiKey={apiKey}>
+    <AppProvider embedded apiKey={apiKey} shopOrigin={shop}>
       <s-app-nav>
         <s-link href="/app" rel="home">
           Dashboard
