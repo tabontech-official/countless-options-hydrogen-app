@@ -3,7 +3,7 @@ import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate, appUrl } from "../shopify.server";
-import { forgetPlan, getPlan, productsWithOptions } from "../billing.server";
+import { forgetPlan, getPlan, productsWithOptions, setUpgradePending } from "../billing.server";
 import { FREE_PRODUCT_LIMIT, UNLIMITED_PLAN, UNLIMITED_PRICE } from "../options";
 import { PlanCard } from "../components/PlanCard";
 
@@ -36,10 +36,11 @@ export const action = async ({ request }) => {
     if (plan.unlimited) return { toast: "You’re already on Unlimited" };
     try {
       forgetPlan(shop); // read it again once they’re back
+      await setUpgradePending(admin, true); // the dashboard settles it when they're back (app._index.jsx)
       // billing.request() throws or returns a Response to redirect to Shopify’s approval page.
       // Development stores get a test charge, so they’re never billed.
       if (!appUrl) throw new Error("SHOPIFY_APP_URL not set");
-      const returnUrl = `${appUrl}/app?from=plans`;
+      const returnUrl = `${appUrl}/app?shop=${shop}`; // the app opens outside the admin on return, so it needs the shop
       console.log(`[PLAN] ${shop}: requesting billing for ${UNLIMITED_PLAN}, returnUrl=${returnUrl}`);
       let result;
       try {

@@ -60,6 +60,42 @@ export const forgetPlan = (shop) => {
   pending.delete(shop); // the next read asks Shopify again; a check still in flight can't write its answer back
 };
 
+// An upgrade waiting for the merchant's approval, or approved but not applied yet. It's a metafield on the app
+// installation, not a URL parameter: the trip through Shopify's approval page can drop parameters.
+async function installation(admin) {
+  const res = await admin.graphql(`#graphql
+    query Installation { currentAppInstallation { id metafield(namespace: "$app", key: "plan_upgrade_pending") { value } } }`);
+  return (await res.json()).data.currentAppInstallation;
+}
+
+export async function upgradePending(admin) {
+  return Boolean((await installation(admin)).metafield);
+}
+
+export async function setUpgradePending(admin, on) {
+  const { id } = await installation(admin);
+  const metafield = { ownerId: id, namespace: "$app", key: "plan_upgrade_pending" };
+  if (on) {
+    const res = await admin.graphql(
+      `#graphql
+      mutation SetUpgradePending($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) { userErrors { message } }
+      }`,
+      { variables: { metafields: [{ ...metafield, type: "single_line_text_field", value: "1" }] } },
+    );
+    const [error] = (await res.json()).data.metafieldsSet.userErrors;
+    if (error) throw new Error(error.message);
+  } else {
+    await admin.graphql(
+      `#graphql
+      mutation ClearUpgradePending($metafields: [MetafieldIdentifierInput!]!) {
+        metafieldsDelete(metafields: $metafields) { userErrors { message } }
+      }`,
+      { variables: { metafields: [metafield] } },
+    );
+  }
+}
+
 /** How many products may have options: FREE_PRODUCT_LIMIT on Free, Infinity on Unlimited. */
 export const productLimit = async (admin, shop, options) =>
   (await getPlan(admin, shop, options)).unlimited ? Infinity : FREE_PRODUCT_LIMIT;

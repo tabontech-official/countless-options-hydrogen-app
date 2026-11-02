@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
-import { Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
+import { Link, useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate, notifySubscription } from "../shopify.server";
 import prisma from "../db.server";
 import { FIELD_TYPES, hasPrices } from "../options";
 import { applyAllSets, countProducts, gql, isBlockInTheme, themeEditorUrl } from "../options.server";
-import { FREE_PRODUCT_LIMIT, getPlan } from "../billing.server";
+import { FREE_PRODUCT_LIMIT, getPlan, setUpgradePending, upgradePending } from "../billing.server";
 import { TEMPLATES } from "../templates";
 import { plural } from "../components/OptionSetsTable";
 import { Brand } from "../components/Brand";
@@ -19,11 +19,9 @@ import { TemplateGallery } from "../components/TemplateGallery";
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const { shop } = session;
-  // Back from approving Unlimited (the Plans page marks the return with from=plans; Shopify's charge_id
-  // is a backup), so read the plan fresh.
-  const { search } = new URL(request.url);
-  const back = search.includes("charge_id=") || search.includes("from=plans");
-  if (back) console.log(`[DASHBOARD] ${shop}: returning from billing, fetching fresh plan`);
+  // Set while an upgrade waits for the merchant's approval, or is approved but not applied yet: read the plan fresh.
+  const pending = await upgradePending(admin).catch(() => false);
+  if (pending) console.log(`[DASHBOARD] ${shop}: upgrade pending, fetching fresh plan`);
   const [latest, activeSets, draft, products, totalProducts, blockAdded, shopName, plan] = await Promise.all([
     prisma.optionSet.findFirst({ where: { shop }, orderBy: { updatedAt: "desc" }, select: { id: true } }),
     prisma.optionSet.findMany({ where: { shop, status: "ACTIVE" }, select: { fields: true } }),
@@ -44,9 +42,9 @@ export const loader = async ({ request }) => {
     )
       .then((data) => data.shop.name)
       .catch(() => null),
-    getPlan(admin, shop, { maxAge: back ? 0 : 30_000 })
+    getPlan(admin, shop, { maxAge: pending ? 0 : 30_000 })
       .then((p) => {
-        if (back) console.log(`[DASHBOARD] ${shop}: plan after billing: ${p.unlimited ? "Unlimited" : "Free"}`);
+        if (pending) console.log(`[DASHBOARD] ${shop}: plan after billing: ${p.unlimited ? "Unlimited" : "Free"}`);
         return p;
       })
       .catch((err) => {
@@ -72,12 +70,13 @@ export const loader = async ({ request }) => {
     pricedCount: fields.filter((f) => hasPrices([f])).length,
     typeCounts: Object.fromEntries(byType),
     blockAdded,
-    // Free plan only: the product allowance (billing.server.js). Hidden when the plan can't be checked.
-    limit: plan && !plan.unlimited ? FREE_PRODUCT_LIMIT : null,
-    // Just upgraded: the page asks the action to tell Make and re-apply every set (products Free left out).
-    upgraded: back && Boolean(plan?.unlimited),
-    // Back from approval but the plan check failed: say so, instead of showing Free with no explanation.
-    unconfirmed: back && !plan,
+    // The plan as Shopify has it, for the plan card (null when it couldn't be checked).
+    unlimited: plan ? plan.unlimited : null,
+    limit: FREE_PRODUCT_LIMIT,
+    // Back from approval: the action settles it (applies the sets, or says it wasn't approved).
+    settling: pending && Boolean(plan),
+    // Back from approval but the plan check failed: say so, instead of showing nothing.
+    unconfirmed: pending && !plan,
     themeEditorUrl: themeEditorUrl(shop),
     // Optional: set SUPPORT_EMAIL in .env to show the support line at the bottom.
     // eslint-disable-next-line no-undef
@@ -85,21 +84,28 @@ export const loader = async ({ request }) => {
   };
 };
 
-// Just upgraded (checked again here, not trusted from the page): tell the Make scenario, then apply
-// every active set again, so products the Free plan left out get options.
+// Settles a pending upgrade (checked again here, not trusted from the page). Approved: tell Make, then apply every
+// set again, so products the Free plan left out get options. Not approved: say so. The mark goes either way.
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const { shop } = session;
+  const plan = await getPlan(admin, shop, { maxAge: 0 }).catch(() => null);
+  if (!plan) return { unconfirmed: true }; // the mark stays, so the next load settles it
+  if (!plan.unlimited) {
+    await setUpgradePending(admin, false);
+    return { declined: true };
+  }
+  let applied;
   try {
-    const plan = await getPlan(admin, shop, { maxAge: 0 });
-    if (!plan.unlimited) return null;
     await notifySubscription(admin, shop);
     // applied: false when products were still left out, so the page says so instead of claiming success.
-    return { applied: (await applyAllSets(admin, shop)) === 0 };
+    applied = (await applyAllSets(admin, shop)) === 0;
   } catch (error) {
     console.error(error);
-    return { applied: false };
+    return { applied: false }; // the mark stays: a reload tries again
   }
+  await setUpgradePending(admin, false);
+  return { applied };
 };
 
 const number = new Intl.NumberFormat("en-US");
@@ -109,21 +115,12 @@ export default function Dashboard() {
   const shopify = useAppBridge();
   const applying = useFetcher();
   const asked = useRef(false);
-  const [, setSearchParams] = useSearchParams();
   useEffect(() => {
-    if (!data.upgraded || asked.current) return;
+    // Once is enough: the action clears the mark, so a reload doesn't settle it again.
+    if (!data.settling || asked.current) return;
     asked.current = true;
     applying.submit({}, { method: "post" });
-    // Once is enough: without the return marks, a reload or Back doesn't run it again.
-    setSearchParams(
-      (params) => {
-        params.delete("charge_id");
-        params.delete("from");
-        return params;
-      },
-      { replace: true, preventScrollReset: true },
-    );
-  }, [data.upgraded, applying, setSearchParams]);
+  }, [data.settling, applying]);
   useEffect(() => {
     if (applying.data?.applied) shopify.toast.show("Unlimited is on. Every product your option sets cover has options.");
   }, [applying.data, shopify]);
@@ -165,7 +162,12 @@ export default function Dashboard() {
             Open an option set and save it to add its options to every product.
           </s-banner>
         )}
-        {data.unconfirmed && (
+        {applying.data?.declined && (
+          <s-banner tone="warning" heading="Unlimited wasn’t approved">
+            Your store is still on the Free plan. You can try again from Plans.
+          </s-banner>
+        )}
+        {(data.unconfirmed || applying.data?.unconfirmed) && (
           <s-banner tone="warning" heading="We couldn’t confirm your plan yet">
             Reload this page in a minute. Your options keep working in the meantime.
           </s-banner>
@@ -173,11 +175,13 @@ export default function Dashboard() {
         <Hero data={data} hasSets={hasSets} live={live} steps={steps} />
         {!live && <SetupSteps steps={steps} />}
         <Kpis data={data} />
-        {data.limit != null && (
-          <PlanCard used={productCount} limit={data.limit}>
-            <Link className="co-btn co-btn--dark co-btn--small" to="/app/plans">
-              Upgrade to Unlimited
-            </Link>
+        {data.unlimited !== null && (
+          <PlanCard unlimited={data.unlimited} used={productCount} limit={data.limit}>
+            {!data.unlimited && (
+              <Link className="co-btn co-btn--dark co-btn--small" to="/app/plans">
+                Upgrade to Unlimited
+              </Link>
+            )}
           </PlanCard>
         )}
         {hasSets && <Insights data={data} />}
