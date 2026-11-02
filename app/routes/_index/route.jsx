@@ -43,7 +43,7 @@ const STEPS = [
 const FAQS = [
   [
     "Will it slow down my store?",
-    "No. Options load with the product itself, so your storefront never waits on our servers. The block adds one small script, under 10 KB.",
+    "No. Options load with the product itself, so your storefront never waits on our servers. The block adds one small script, under 10 KB, plus about 8.5 KB on products with a file upload.",
   ],
   [
     "How are option prices charged?",

@@ -26,7 +26,7 @@ name = "Product options"
 access.storefront = "public_read"
 
 [webhooks]
-api_version = "2027-01"
+api_version = "2026-10"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"

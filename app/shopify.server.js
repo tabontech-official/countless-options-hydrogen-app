@@ -177,7 +177,11 @@ const shopify = shopifyApp({
     expiringOfflineAccessTokens: true,
   },
   hooks: {
-    afterAuth: ({ admin, session }) => notifyInstall(admin, session.shop),
+    // Every (re)install runs this: forget the shop's earlier check, since a reinstall is a new installation.
+    afterAuth: ({ admin, session }) => {
+      installChecked.delete(session.shop);
+      return notifyInstall(admin, session.shop);
+    },
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }

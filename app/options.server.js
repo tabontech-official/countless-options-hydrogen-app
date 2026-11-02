@@ -1,12 +1,20 @@
 import prisma from "./db.server";
-import { productLimit, productsWithOptions } from "./billing.server";
+import { forgetPlan, productLimit, productsWithOptions } from "./billing.server";
 import { METAFIELD_TYPES, appliesTo, hasPrices, mergeFields, rulesOf, rulesSearch } from "./options";
 
 export const BLOCK_HANDLE = "product_options";
 
+// Shopify can answer with status 200, `errors` and no `data`. A throttled query is tried again after a
+// pause; anything else throws the reason here, so the caller doesn't fail later on undefined.
 export async function gql(admin, query, variables) {
-  const res = await admin.graphql(query, { variables });
-  return (await res.json()).data;
+  for (let attempt = 1; ; attempt++) {
+    const res = await admin.graphql(query, { variables });
+    const { data, errors } = await res.json();
+    if (data) return data;
+    const throttled = errors?.some((e) => e.extensions?.code === "THROTTLED");
+    if (!throttled || attempt === 4) throw new Error(`Shopify GraphQL: ${errors?.map((e) => e.message).join("; ") || "no data"}`);
+    await new Promise((resolve) => setTimeout(resolve, 1000 * attempt)); // give the query-cost bucket time to refill
+  }
 }
 
 const chunks = (list, size) =>
@@ -290,6 +298,7 @@ async function linkAddon(admin, transform, variantId) {
 // the "Option add-ons" product, which Shopify no longer lets the app touch once uninstalled.
 export async function eraseShopData(shop) {
   await prisma.$transaction([prisma.optionSet.deleteMany({ where: { shop } }), prisma.session.deleteMany({ where: { shop } })]);
+  forgetPlan(shop); // this server instance's memory of the old plan goes too: a reinstall starts on Free
   pricingChecked.delete(shop);
 }
 

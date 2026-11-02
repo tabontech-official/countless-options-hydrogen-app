@@ -13,7 +13,7 @@ global.prismaGlobal = {
     deleteMany: async ({ where }) => db.deleted.push(...where.OR),
   },
 };
-const { canonical, syncProducts } = await import("./options.server.js");
+const { canonical, gql, syncProducts } = await import("./options.server.js");
 
 test("rules read back from the database (keys reordered) still count as unchanged", () => {
   // Postgres JSONB returns object keys sorted by length, so a saved condition comes back as {op, field, value}.
@@ -82,7 +82,7 @@ test("Unlimited: every matching product gets options", async () => {
 
 // ---------- Plan check (Billing API, through the store's own Admin API access) ----------
 
-const { getPlan, PlanUnknownError } = await import("./billing.server.js");
+const { forgetPlan, getPlan, PlanUnknownError } = await import("./billing.server.js");
 
 // A fake Admin API answering the plan query from canned replies (a function throws), counting calls.
 function planAdmin(replies) {
@@ -124,9 +124,33 @@ test("plan: simultaneous checks share one request, and answers are cached", asyn
 test("plan: when Shopify can't answer, the last known plan stands; with none, it throws", async () => {
   const admin = planAdmin([{ subs: [] }, down, down]);
   assert.equal((await getPlan(admin, "g.myshopify.com")).unlimited, false);
-  // Never turns a Free shop Unlimited because of an error.
-  assert.equal((await getPlan(admin, "g.myshopify.com", { maxAge: 0 })).unlimited, false);
+  // A fresh read (maxAge 0) never settles for the old answer; the caller decides.
+  await assert.rejects(getPlan(admin, "g.myshopify.com", { maxAge: 0 }), PlanUnknownError);
   await assert.rejects(getPlan(admin, "h.myshopify.com"), PlanUnknownError);
+});
+
+test("plan: a check still in flight when the plan is forgotten can't put its old answer back", async () => {
+  let answer;
+  const admin = { graphql: () => new Promise((resolve) => (answer = resolve)) };
+  const first = getPlan(admin, "j.myshopify.com"); // asks Shopify; the answer hasn't arrived yet
+  forgetPlan("j.myshopify.com"); // the merchant just approved a charge
+  answer({ json: async () => ({ data: { currentAppInstallation: { activeSubscriptions: [] }, shop: { plan: { partnerDevelopment: false } } } }) });
+  await first;
+  // The old Free answer must not be cached: the next read asks Shopify again and sees Unlimited.
+  const next = planAdmin([{ subs: [sub()] }]);
+  assert.equal((await getPlan(next, "j.myshopify.com")).unlimited, true);
+  assert.equal(next.calls, 1);
+});
+
+test("gql: a throttled query is tried again; a refused one says why instead of returning nothing", async () => {
+  const replies = [
+    { data: null, errors: [{ message: "Throttled", extensions: { code: "THROTTLED" } }] },
+    { data: { shop: { name: "Shop" } } },
+  ];
+  const admin = { graphql: async () => ({ json: async () => replies.shift() }) };
+  assert.deepEqual(await gql(admin, "query { shop { name } }"), { shop: { name: "Shop" } });
+  const refused = { graphql: async () => ({ json: async () => ({ data: null, errors: [{ message: "Access denied for shop" }] }) }) };
+  await assert.rejects(gql(refused, "query { shop { name } }"), /Access denied for shop/);
 });
 
 test("sync with nothing new to give options to never asks for the plan", async () => {

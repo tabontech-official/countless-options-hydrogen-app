@@ -128,11 +128,11 @@ const GUIDES = [
       },
       {
         title: "Store speed",
-        text: "Options load with the product page itself. The block’s script is under 10 KB, plus 3 KB on products with a file upload.",
+        text: "Options load with the product page itself. The block’s script is under 10 KB, plus about 8.5 KB on products with a file upload.",
       },
       {
         title: "Uninstalling",
-        text: "Go to Settings → Apps, open Countless Options and click Uninstall. Options stop showing right away. Your option sets are kept for 48 hours in case you reinstall.",
+        text: "Go to Settings → Apps, open Countless Options and click Uninstall. Options stop showing right away. Uninstalling deletes your option sets. Files customers uploaded stay in your store.",
       },
     ],
   },

@@ -33,24 +33,32 @@ export async function getPlan(admin, shop, { maxAge = PLAN_CACHE_MS } = {}) {
   const known = plans.get(shop);
   if (known && Date.now() - known.at < maxAge) return known.plan;
   if (!pending.has(shop)) {
+    // Only the newest check writes the cache: forgetPlan drops a check still in flight, so its older answer can't come back.
     const check = fetchPlan(admin, shop)
       .then((plan) => {
-        plans.set(shop, { plan, at: Date.now() });
+        if (pending.get(shop) === check) plans.set(shop, { plan, at: Date.now() });
         return plan;
       })
-      .finally(() => pending.delete(shop));
+      .finally(() => {
+        if (pending.get(shop) === check) pending.delete(shop);
+      });
     pending.set(shop, check);
   }
   try {
     return await pending.get(shop);
   } catch (error) {
     console.error(`[PLAN] ${shop}: couldn't check the plan:`, error?.message ?? error);
-    if (known) return known.plan;
+    // A read that asked for a fresh answer (maxAge 0) never falls back to an old one, so a reinstalled
+    // shop can't inherit a previous install's Unlimited from this instance's memory.
+    if (known && maxAge > 0) return known.plan;
     throw new PlanUnknownError(`Couldn't check the plan for ${shop}`);
   }
 }
 
-export const forgetPlan = (shop) => plans.delete(shop);
+export const forgetPlan = (shop) => {
+  plans.delete(shop);
+  pending.delete(shop); // the next read asks Shopify again; a check still in flight can't write its answer back
+};
 
 /** How many products may have options: FREE_PRODUCT_LIMIT on Free, Infinity on Unlimited. */
 export const productLimit = async (admin, shop, options) =>

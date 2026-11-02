@@ -1805,7 +1805,7 @@ function ChoicesEditor({ field, onChange }) {
               onInput={(e) => setChoice(i, { price: e.currentTarget.value })}
             />
           )}
-          {hasDefault && (
+          {hasDefault && !isPriced(choice.price) && (
             <span className="co-default">
               <input
                 type="radio"

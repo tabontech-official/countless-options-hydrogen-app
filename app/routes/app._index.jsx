@@ -5,7 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate, notifySubscription } from "../shopify.server";
 import prisma from "../db.server";
 import { FIELD_TYPES, hasPrices } from "../options";
-import { applyAllSets, countProducts, isBlockInTheme, themeEditorUrl } from "../options.server";
+import { applyAllSets, countProducts, gql, isBlockInTheme, themeEditorUrl } from "../options.server";
 import { FREE_PRODUCT_LIMIT, getPlan } from "../billing.server";
 import { TEMPLATES } from "../templates";
 import { plural } from "../components/OptionSetsTable";
@@ -19,8 +19,10 @@ import { TemplateGallery } from "../components/TemplateGallery";
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const { shop } = session;
-  // Back from approving Unlimited: Shopify adds charge_id to the return URL, so read the plan fresh.
-  const back = new URL(request.url).searchParams.has("charge_id");
+  // Back from approving Unlimited (the Plans page marks the return with from=plans; Shopify's charge_id
+  // is a backup), so read the plan fresh.
+  const { search } = new URL(request.url);
+  const back = search.includes("charge_id=") || search.includes("from=plans");
   const [latest, activeSets, draft, products, totalProducts, blockAdded, shopName, plan] = await Promise.all([
     prisma.optionSet.findFirst({ where: { shop }, orderBy: { updatedAt: "desc" }, select: { id: true } }),
     prisma.optionSet.findMany({ where: { shop, status: "ACTIVE" }, select: { fields: true } }),
@@ -33,13 +35,14 @@ export const loader = async ({ request }) => {
     }),
     countProducts(admin),
     isBlockInTheme(admin),
-    admin
-      .graphql(
-        `#graphql
-        query ShopName { shop { name } }`,
-      )
-      .then((res) => res.json())
-      .then((json) => json.data.shop.name),
+    // The welcome line can do without the name, so a failed read doesn't take the whole dashboard down.
+    gql(
+      admin,
+      `#graphql
+      query ShopName { shop { name } }`,
+    )
+      .then((data) => data.shop.name)
+      .catch(() => null),
     getPlan(admin, shop, { maxAge: back ? 0 : 30_000 }).catch(() => null),
   ]);
 
@@ -64,6 +67,8 @@ export const loader = async ({ request }) => {
     limit: plan && !plan.unlimited ? FREE_PRODUCT_LIMIT : null,
     // Just upgraded: the page asks the action to tell Make and re-apply every set (products Free left out).
     upgraded: back && Boolean(plan?.unlimited),
+    // Back from approval but the plan check failed: say so, instead of showing Free with no explanation.
+    unconfirmed: back && !plan,
     themeEditorUrl: themeEditorUrl(shop),
     // Optional: set SUPPORT_EMAIL in .env to show the support line at the bottom.
     // eslint-disable-next-line no-undef
@@ -100,10 +105,11 @@ export default function Dashboard() {
     if (!data.upgraded || asked.current) return;
     asked.current = true;
     applying.submit({}, { method: "post" });
-    // Once is enough: without charge_id, a reload or Back doesn't run it again.
+    // Once is enough: without the return marks, a reload or Back doesn't run it again.
     setSearchParams(
       (params) => {
         params.delete("charge_id");
+        params.delete("from");
         return params;
       },
       { replace: true, preventScrollReset: true },
@@ -148,6 +154,11 @@ export default function Dashboard() {
         {applying.data?.applied === false && (
           <s-banner tone="warning" heading="Unlimited is on, but some products weren’t updated">
             Open an option set and save it to add its options to every product.
+          </s-banner>
+        )}
+        {data.unconfirmed && (
+          <s-banner tone="warning" heading="We couldn’t confirm your plan yet">
+            Reload this page in a minute. Your options keep working in the meantime.
           </s-banner>
         )}
         <Hero data={data} hasSets={hasSets} live={live} steps={steps} />
@@ -216,7 +227,7 @@ function Hero({ data, hasSets, live, steps }) {
           {live ? "Live on your store" : `Not live yet · ${done} of ${steps.length} setup steps done`}
         </span>
         <h1 className="co-hero__title">
-          {`Welcome${hasSets ? " back" : ""}, ${data.shopName}.`} <em>{next}</em>
+          {`Welcome${hasSets ? " back" : ""}${data.shopName ? `, ${data.shopName}` : ""}.`} <em>{next}</em>
         </h1>
         <p className="co-hero__body">
           Add unlimited options and paid add-ons to any product, priced live and carried through to checkout. Try the
