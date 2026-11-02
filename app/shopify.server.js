@@ -173,9 +173,13 @@ const shopify = shopifyApp({
   // The Plans page (routes/app.plans.jsx) requests and cancels it; billing.server.js reads it.
   billing: {
     [UNLIMITED_PLAN]: {
-      amount: UNLIMITED_PRICE,
-      currencyCode: "USD",
-      interval: BillingInterval.Every30Days,
+      lineItems: [
+        {
+          amount: UNLIMITED_PRICE,
+          currencyCode: "USD",
+          interval: BillingInterval.Every30Days,
+        },
+      ],
     },
   },
   future: {
