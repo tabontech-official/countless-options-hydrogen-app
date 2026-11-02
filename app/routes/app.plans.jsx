@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
+import { authenticate, appUrl } from "../shopify.server";
 import { forgetPlan, getPlan, productsWithOptions } from "../billing.server";
 import { FREE_PRODUCT_LIMIT, UNLIMITED_PLAN, UNLIMITED_PRICE } from "../options";
 import { PlanCard } from "../components/PlanCard";
@@ -38,8 +38,8 @@ export const action = async ({ request }) => {
       forgetPlan(shop); // read it again once they’re back
       // billing.request() throws or returns a Response to redirect to Shopify’s approval page.
       // Development stores get a test charge, so they’re never billed.
-      // Use relative path so Shopify maintains the shop/host context in the redirect back.
-      const returnUrl = `/app?from=plans`;
+      if (!appUrl) throw new Error("SHOPIFY_APP_URL not set");
+      const returnUrl = `${appUrl}/app?from=plans`;
       console.log(`[PLAN] ${shop}: requesting billing for ${UNLIMITED_PLAN}, returnUrl=${returnUrl}`);
       const result = await billing.request({
         plan: UNLIMITED_PLAN,
