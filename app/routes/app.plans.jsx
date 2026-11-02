@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate, appUrl } from "../shopify.server";
+import { authenticate } from "../shopify.server";
 import { forgetPlan, getPlan, productsWithOptions } from "../billing.server";
 import { FREE_PRODUCT_LIMIT, UNLIMITED_PLAN, UNLIMITED_PRICE } from "../options";
 import { PlanCard } from "../components/PlanCard";
