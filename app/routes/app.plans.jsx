@@ -36,17 +36,18 @@ export const action = async ({ request }) => {
     if (plan.unlimited) return { toast: "You’re already on Unlimited" };
     try {
       forgetPlan(shop); // read it again once they’re back
-      // billing.request() throws a Response to redirect to Shopify’s approval page. Development
-      // stores get a test charge, so they’re never billed. The return from Shopify includes charge_id
-      // and/or session restoration; from=plans marks our own knowledge of the return.
+      // billing.request() throws or returns a Response to redirect to Shopify’s approval page.
+      // Development stores get a test charge, so they’re never billed.
       if (!appUrl) throw new Error("SHOPIFY_APP_URL not set. Set it in .env or via shopify app dev.");
       const returnUrl = `${appUrl}/app?from=plans`;
       console.log(`[PLAN] ${shop}: requesting billing for ${UNLIMITED_PLAN}, returnUrl=${returnUrl}`);
-      await billing.request({
+      const result = await billing.request({
         plan: UNLIMITED_PLAN,
         isTest: plan.devStore,
         returnUrl,
       });
+      // If billing.request returns a Response instead of throwing it, throw it here
+      if (result instanceof Response) throw result;
     } catch (error) {
       if (handOver(error)) throw error;
       console.error(`[PLAN] ${shop}: couldn’t start the upgrade:`, error?.message ?? error, error?.stack);
