@@ -41,15 +41,29 @@ export const action = async ({ request }) => {
       if (!appUrl) throw new Error("SHOPIFY_APP_URL not set");
       const returnUrl = `${appUrl}/app?from=plans`;
       console.log(`[PLAN] ${shop}: requesting billing for ${UNLIMITED_PLAN}, returnUrl=${returnUrl}`);
-      const result = await billing.request({
-        plan: UNLIMITED_PLAN,
-        isTest: plan.devStore,
-        returnUrl,
-      });
+      let result;
+      try {
+        result = await billing.request({
+          plan: UNLIMITED_PLAN,
+          isTest: plan.devStore,
+          returnUrl,
+        });
+        console.log(`[PLAN] ${shop}: billing.request returned:`, result?.status, result?.constructor?.name);
+      } catch (err) {
+        console.log(`[PLAN] ${shop}: billing.request threw:`, err?.status, err?.constructor?.name);
+        throw err;
+      }
       // If billing.request returns a Response instead of throwing it, throw it here
-      if (result instanceof Response) throw result;
+      if (result instanceof Response) {
+        console.log(`[PLAN] ${shop}: throwing returned Response with status ${result.status}`);
+        throw result;
+      }
+      console.log(`[PLAN] ${shop}: billing.request completed with unexpected result type:`, typeof result);
     } catch (error) {
-      if (handOver(error)) throw error;
+      if (handOver(error)) {
+        console.log(`[PLAN] ${shop}: Response caught by handOver, throwing`);
+        throw error;
+      }
       console.error(`[PLAN] ${shop}: couldn’t start the upgrade:`, error?.message ?? error, error?.stack);
       return { error: `Couldn’t start upgrade: ${error?.message || "Unknown error"}. Check console logs.` };
     }
