@@ -38,8 +38,8 @@ export const action = async ({ request }) => {
       forgetPlan(shop); // read it again once they’re back
       // billing.request() throws or returns a Response to redirect to Shopify’s approval page.
       // Development stores get a test charge, so they’re never billed.
-      if (!appUrl) throw new Error("SHOPIFY_APP_URL not set. Set it in .env or via shopify app dev.");
-      const returnUrl = `${appUrl}/app?from=plans`;
+      // Use relative path so Shopify maintains the shop/host context in the redirect back.
+      const returnUrl = `/app?from=plans`;
       console.log(`[PLAN] ${shop}: requesting billing for ${UNLIMITED_PLAN}, returnUrl=${returnUrl}`);
       const result = await billing.request({
         plan: UNLIMITED_PLAN,
