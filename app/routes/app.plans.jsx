@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -168,30 +168,49 @@ export default function Plans() {
 
   const downgradeFetcher = useFetcher();
   const isDowngradingToFree = downgradeFetcher.state !== "idle";
+  const wasDowngrading = useRef(false);
 
   const handleUpgrade = () => {
     upgradeFetcher.submit({}, { method: "POST", action: "/app/upgrade" });
   };
 
-  const handleDowngrade = () => {
-    if (
-      !confirm(
-        "Are you sure you want to switch to the Free plan? If you have more than 100 products with options, your chosen 100 products will stay active."
-      )
-    ) {
-      return;
+  const openDowngradeModal = () => {
+    const modal = document.getElementById("downgrade-modal");
+    if (modal?.showOverlay) {
+      modal.showOverlay();
+    } else if (modal?.show) {
+      modal.show();
     }
+  };
+
+  const closeDowngradeModal = () => {
+    const modal = document.getElementById("downgrade-modal");
+    if (modal?.hideOverlay) {
+      modal.hideOverlay();
+    } else if (modal?.hide) {
+      modal.hide();
+    }
+  };
+
+  const confirmDowngrade = () => {
     downgradeFetcher.submit({ intent: "downgrade_to_free" }, { method: "POST" });
   };
 
   useEffect(() => {
+    if (isDowngradingToFree) {
+      wasDowngrading.current = true;
+      return;
+    }
+    if (!wasDowngrading.current) return;
+    wasDowngrading.current = false;
+    closeDowngradeModal();
     if (downgradeFetcher.data?.toast) {
       shopify.toast.show(downgradeFetcher.data.toast);
     }
     if (downgradeFetcher.data?.error) {
       shopify.toast.show(downgradeFetcher.data.error, { isError: true });
     }
-  }, [downgradeFetcher.data, shopify]);
+  }, [isDowngradingToFree, downgradeFetcher.data, shopify]);
 
   useEffect(() => {
     if (upgradeFetcher.data?.confirmationUrl) {
@@ -227,7 +246,7 @@ export default function Plans() {
             {isPro ? (
               <button
                 type="button"
-                onClick={handleDowngrade}
+                onClick={openDowngradeModal}
                 disabled={isDowngradingToFree}
                 className="co-btn co-btn--glass co-btn--small"
               >
@@ -285,7 +304,7 @@ export default function Plans() {
                   {p.name === PLAN_FREE && isPro && (
                     <button
                       type="button"
-                      onClick={handleDowngrade}
+                      onClick={openDowngradeModal}
                       disabled={isDowngradingToFree}
                       className="co-btn co-btn--dark co-btn--small"
                     >
@@ -378,6 +397,36 @@ export default function Plans() {
           Countless Options subscriptions are billed through Shopify App Pricing every 30 days. You can upgrade, downgrade, or cancel anytime through Shopify. On downgrade, your Pro feature access remains fully active until the end of your verified paid billing period.
         </p>
       </div>
+
+      <s-modal id="downgrade-modal" heading="Switch to Free plan?">
+        <s-paragraph>
+          Are you sure you want to switch to the Free plan?
+        </s-paragraph>
+        <s-paragraph>
+          {`Your Pro features will remain active until the end of your billing cycle${
+            plan?.currentPeriodEnd ? ` (${formatDate(plan.currentPeriodEnd)})` : ""
+          }. After that, your store will use the Free plan with a 100-product limit. All your option sets and configurations are preserved.`}
+        </s-paragraph>
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          tone="critical"
+          loading={isDowngradingToFree ? "" : undefined}
+          disabled={isDowngradingToFree}
+          onClick={confirmDowngrade}
+        >
+          Switch to Free
+        </s-button>
+        <s-button
+          slot="secondary-actions"
+          commandFor="downgrade-modal"
+          command="--hide"
+          disabled={isDowngradingToFree}
+          onClick={closeDowngradeModal}
+        >
+          Cancel
+        </s-button>
+      </s-modal>
     </s-page>
   );
 }
