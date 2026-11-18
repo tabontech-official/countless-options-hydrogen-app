@@ -500,3 +500,19 @@ export function mergeFields(fieldLists) {
     return !seen.has(key) && seen.add(key);
   });
 }
+
+// Sanitizes user input store names, custom domains, or full URLs into canonical *.myshopify.com domain.
+export function cleanShopDomain(input) {
+  if (!input) return "";
+  let shop = String(input).trim().toLowerCase();
+  shop = shop.replace(/^https?:\/\//, "");
+  if (shop.includes("admin.shopify.com/store/")) {
+    const parts = shop.split("admin.shopify.com/store/")[1]?.split(/[/?#]/)[0];
+    if (parts) shop = parts;
+  }
+  shop = shop.split("/")[0].split("?")[0].split("#")[0];
+  if (!shop.includes(".")) {
+    shop = `${shop}.myshopify.com`;
+  }
+  return shop;
+}

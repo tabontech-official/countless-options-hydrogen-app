@@ -315,3 +315,13 @@ test("rules: product metafields, matched like Shopify's search", () => {
     '(metafields.shopify.color-pattern:"gid://shopify/Metaobject/7") -tag:product-options-addon',
   );
 });
+
+test("cleanShopDomain sanitizes handles, URLs, and admin URLs", async () => {
+  const { cleanShopDomain } = await import("./options.js");
+  assert.equal(cleanShopDomain("testing-mongodb"), "testing-mongodb.myshopify.com");
+  assert.equal(cleanShopDomain("testing-mongodb.myshopify.com"), "testing-mongodb.myshopify.com");
+  assert.equal(cleanShopDomain("https://testing-mongodb.myshopify.com/"), "testing-mongodb.myshopify.com");
+  assert.equal(cleanShopDomain("https://admin.shopify.com/store/testing-mongodb"), "testing-mongodb.myshopify.com");
+  assert.equal(cleanShopDomain("https://admin.shopify.com/store/testing-mongodb/apps"), "testing-mongodb.myshopify.com");
+  assert.equal(cleanShopDomain(""), "");
+});

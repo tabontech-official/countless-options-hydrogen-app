@@ -1,5 +1,7 @@
-import { redirect, useLoaderData } from "react-router";
-import { appStoreUrl } from "../../options.server";
+import { useRef } from "react";
+import { Form, redirect, useActionData } from "react-router";
+import { login } from "../../shopify.server";
+import { cleanShopDomain } from "../../options";
 import { TEMPLATES } from "../../templates";
 import { Brand } from "../../components/Brand";
 import { Capabilities } from "../../components/Capabilities";
@@ -15,7 +17,30 @@ export const loader = async ({ request }) => {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
-  return { appStoreUrl: appStoreUrl() };
+  return {};
+};
+
+export const action = async ({ request }) => {
+  const formData = await request.formData();
+  const rawShop = formData.get("shop");
+  const shop = cleanShopDomain(rawShop);
+
+  if (!shop || !shop.endsWith(".myshopify.com") || shop === ".myshopify.com") {
+    return { error: "Please enter a valid store domain (e.g. your-store.myshopify.com)." };
+  }
+
+  const url = new URL(request.url);
+  url.searchParams.set("shop", shop);
+  const loginRequest = new Request(url.toString(), {
+    method: "GET",
+    headers: request.headers,
+  });
+
+  const result = await login(loginRequest);
+  if (result?.shop) {
+    return { error: "Invalid store domain. Please check and try again." };
+  }
+  return result;
 };
 
 export const meta = () => [
@@ -67,10 +92,18 @@ const FAQS = [
   ],
 ];
 
-const showInstall = () => document.getElementById("install")?.scrollIntoView({ behavior: "smooth", block: "center" });
-
 export default function Landing() {
-  const { appStoreUrl } = useLoaderData();
+  const actionData = useActionData();
+  const inputRef = useRef(null);
+
+  const focusInstall = (e) => {
+    e.preventDefault();
+    const el = document.getElementById("install");
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 250);
+  };
 
   return (
     <div className={styles.page}>
@@ -91,7 +124,7 @@ export default function Landing() {
             </a>
           ))}
         </nav>
-        <a className="co-btn co-btn--dark co-btn--small" href={appStoreUrl} target="_top" rel="noopener">
+        <a className="co-btn co-btn--dark co-btn--small" href="#install" onClick={focusInstall}>
           Install app
         </a>
       </header>
@@ -107,14 +140,34 @@ export default function Landing() {
               Add engraving, gift wrap, custom text, swatches and paid add-ons to any product. Prices update live on the
               product page and carry through to checkout. No variants, no code.
             </p>
-            {/* Installs start on Shopify's own page (App Store requirement 2.3.1). */}
-            <div id="install" className={`co-actions ${styles.actions}`}>
-              <a className="co-btn co-btn--dark" href={appStoreUrl} target="_top" rel="noopener">
-                Install on Shopify →
-              </a>
-              <a className="co-btn co-btn--glass" href="#how">
-                See how it works
-              </a>
+            <div id="install" className={styles.installBox}>
+              <Form method="post" className={styles.installForm}>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  name="shop"
+                  placeholder="your-store.myshopify.com"
+                  className={styles.storeInput}
+                  required
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck="false"
+                  aria-label="Shopify store domain"
+                />
+                <button type="submit" className={`co-btn co-btn--dark ${styles.installBtn}`}>
+                  Install on Shopify →
+                </button>
+              </Form>
+              {actionData?.error && (
+                <p className={styles.errorText} role="alert">
+                  {actionData.error}
+                </p>
+              )}
+              <div className={styles.installSub}>
+                <a className={styles.howLink} href="#how">
+                  See how it works ↓
+                </a>
+              </div>
             </div>
             <ul className={styles.trust}>
               <li>Theme app block, no code edits</li>
@@ -124,7 +177,7 @@ export default function Landing() {
           </div>
 
           <div className={styles.demo}>
-            <TryIt onAddToCart={showInstall} />
+            <TryIt onAddToCart={focusInstall} />
             <span className={`co-glass ${styles.chip} ${styles.chipTop}`} aria-hidden="true">
               <i className={styles.dot} />
               Follow-up shown when ticked
@@ -205,11 +258,24 @@ export default function Landing() {
             <h2 className="co-heading co-heading--small">
               Give every product <em>the options it deserves.</em>
             </h2>
-            <p>Set up your first option set from a template or from scratch.</p>
+            <p>Enter your store domain to install Countless Options.</p>
           </div>
-          <a className="co-btn co-btn--dark" href={appStoreUrl} target="_top" rel="noopener">
-            Install app →
-          </a>
+          <Form method="post" className={styles.installForm} style={{ minInlineSize: "300px" }}>
+            <input
+              type="text"
+              name="shop"
+              placeholder="your-store.myshopify.com"
+              className={styles.storeInput}
+              required
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck="false"
+              aria-label="Shopify store domain"
+            />
+            <button type="submit" className={`co-btn co-btn--dark ${styles.installBtn}`}>
+              Install app →
+            </button>
+          </Form>
         </section>
       </main>
 

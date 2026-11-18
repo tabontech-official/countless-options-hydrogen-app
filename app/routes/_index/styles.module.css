@@ -147,6 +147,72 @@
 .actions {
   margin-block-start: 26px;
 }
+.installBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-inline-size: 490px;
+  margin-block-start: 24px;
+}
+.installForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  background: var(--co-glass-strong);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--co-glass-edge);
+  border-radius: 14px;
+  box-shadow: 0 4px 18px -4px rgba(30, 20, 60, 0.12), var(--co-shadow);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.installForm:focus-within {
+  border-color: var(--co-brand);
+  box-shadow: 0 0 0 3px rgba(91, 71, 224, 0.18), var(--co-shadow);
+}
+.storeInput {
+  flex: 1;
+  min-inline-size: 0;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--co-ink);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+.storeInput::placeholder {
+  color: var(--co-ink-3);
+  font-size: 13.5px;
+}
+.installBtn {
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.installSub {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+}
+.howLink {
+  color: var(--co-ink-2);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+.howLink:hover {
+  color: var(--co-brand);
+}
+.errorText {
+  color: #c2551c;
+  font-size: 12px;
+  font-weight: 550;
+  margin: 0;
+  padding-inline-start: 4px;
+}
 .trust {
   display: flex;
   flex-wrap: wrap;
