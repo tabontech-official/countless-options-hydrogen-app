@@ -64,10 +64,10 @@ export const action = async ({ request }) => {
     try {
       await cancelSubscription(admin, shop);
       await enforceFreeDowngrade(admin, shop);
-      return { toast: "Successfully switched to Free plan." };
+      return { toast: "Pro plan cancelled. Downgrade scheduled for end of billing cycle." };
     } catch (err) {
       console.error("[PLANS] Downgrade failed:", err);
-      return { error: err?.message || "Failed to switch to Free plan." };
+      return { error: err?.message || "Failed to cancel Pro plan." };
     }
   }
 
@@ -243,14 +243,14 @@ export default function Plans() {
             currentPeriodEnd={plan.currentPeriodEnd}
             configuredCount={configuredCount}
           >
-            {isPro ? (
+            {isDowngrading ? null : isPro ? (
               <button
                 type="button"
                 onClick={openDowngradeModal}
                 disabled={isDowngradingToFree}
                 className="co-btn co-btn--glass co-btn--small"
               >
-                {isDowngradingToFree ? "Switching to Free..." : "Switch to Free"}
+                {isDowngradingToFree ? "Cancelling Pro plan..." : "Cancel Pro plan"}
               </button>
             ) : (
               <button
@@ -299,16 +299,6 @@ export default function Plans() {
                       className="co-btn co-btn--dark co-btn--small"
                     >
                       {isUpgrading ? "Redirecting to Shopify..." : "Upgrade to Pro"}
-                    </button>
-                  )}
-                  {p.name === PLAN_FREE && isPro && (
-                    <button
-                      type="button"
-                      onClick={openDowngradeModal}
-                      disabled={isDowngradingToFree}
-                      className="co-btn co-btn--dark co-btn--small"
-                    >
-                      {isDowngradingToFree ? "Switching to Free..." : "Switch to Free"}
                     </button>
                   )}
                 </div>
@@ -398,9 +388,9 @@ export default function Plans() {
         </p>
       </div>
 
-      <s-modal id="downgrade-modal" heading="Switch to Free plan?">
+      <s-modal id="downgrade-modal" heading="Cancel Pro plan?">
         <s-paragraph>
-          Are you sure you want to switch to the Free plan?
+          Are you sure you want to cancel your Pro plan?
         </s-paragraph>
         <s-paragraph>
           {`Your Pro features will remain active until the end of your billing cycle${
@@ -415,7 +405,7 @@ export default function Plans() {
           disabled={isDowngradingToFree}
           onClick={confirmDowngrade}
         >
-          Switch to Free
+          Cancel Pro plan
         </s-button>
         <s-button
           slot="secondary-actions"
@@ -424,7 +414,7 @@ export default function Plans() {
           disabled={isDowngradingToFree}
           onClick={closeDowngradeModal}
         >
-          Cancel
+          Keep Pro
         </s-button>
       </s-modal>
     </s-page>
