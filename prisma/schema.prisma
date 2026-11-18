@@ -58,3 +58,20 @@ model OptionSetProduct {
   @@id([optionSetId, productId])
   @@index([productId])
 }
+
+// Stores the verified billing, subscription, and entitlement state per shop.
+model ShopBilling {
+  shop             String    @id
+  plan             String    @default("FREE") // "FREE" | "PRO"
+  status           String    @default("ACTIVE") // "ACTIVE" | "PENDING" | "CANCELLED" | "DECLINED" | "FROZEN" | "EXPIRED"
+  effectivePlan    String    @default("FREE") // "FREE" | "PRO" (retains PRO during paid period even if downgraded to FREE)
+  subscriptionId   String?
+  currentPeriodEnd DateTime?
+  downgradeDate    DateTime?
+  chosenProductIds Json      @default("[]") // Array of product GIDs merchant explicitly keeps active on Free
+  test             Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([shop])
+}

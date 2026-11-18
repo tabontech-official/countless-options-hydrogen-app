@@ -221,11 +221,14 @@ export const MAX_FIELDS = 50;
 export const MAX_CHOICES = 100;
 export const MAX_PRICE = 100000;
 export const MAX_PRODUCTS = 250; // Admin API `nodes` limit, used to load a set's products in one call.
-// Products that may have options on the Free plan (billing.server.js); Unlimited has no cap.
+// Products that may have options on the Free plan (billing.server.js); Pro has no cap.
 export const FREE_PRODUCT_LIMIT = 100;
-// The paid plan: its name in Shopify's Billing API (shopify.server.js `billing`) and its price in
-// USD every 30 days. The charge and the Plans page both read these, so they can't disagree.
-export const UNLIMITED_PLAN = "Unlimited";
+// Current plans: Free ($0, up to 100 distinct products) and Pro ($10.99/30 days, unlimited products).
+export const PLAN_FREE = "Free";
+export const PLAN_PRO = "Pro";
+export const PRO_PRICE = 10.99;
+// Backwards-compatibility aliases
+export const UNLIMITED_PLAN = "Pro";
 export const UNLIMITED_PRICE = 10.99;
 
 export const newChoice = (type) =>

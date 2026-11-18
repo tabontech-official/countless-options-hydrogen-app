@@ -29,7 +29,6 @@ import {
   validateOptionSet,
 } from "../options";
 import { canonical, ensurePricing, getProducts, getShopCurrency, ruleMatches, syncProducts } from "../options.server";
-import { productLimit, productsWithOptions } from "../billing.server";
 import { plural } from "../components/OptionSetsTable";
 
 // A set that's gone (deleted, a second Delete click, Back after deleting, another tab)
@@ -159,29 +158,27 @@ export const action = async ({ request, params }) => {
     // canonical: the database hands JSON back with its keys reordered.
     const rulesChanged = existing?.status !== "ACTIVE" || canonical(rulesOf(existing.rules)) !== canonical(rulesOf(data.rules));
     const chosen = data.rules.mode === "manual" ? productIds : rulesChanged && matches.exact ? matches.ids : [];
-    const live = new Set(await productsWithOptions(shop));
-    if (chosen.some((id) => !live.has(id))) {
-      const total = new Set([...(await productsWithOptions(shop, { exceptSet: existing?.id })), ...chosen]).size;
-      // The plan is only asked for when the total could matter, and fresh (another server may still
-      // hold the Free answer from before an upgrade), so a merchant who just paid is never refused.
-      if (total > FREE_PRODUCT_LIMIT) {
-        let limit;
-        try {
-          limit = await productLimit(admin, shop, { maxAge: 0 });
-        } catch {
-          return { errors: ["Couldn’t check your plan with Shopify. Try saving again in a minute."] };
-        }
-        if (total > limit) {
-          return {
-            issues: [
-              {
-                message: `The Free plan covers options on ${limit} products, and saving this would bring you to ${total.toLocaleString("en-US")}. Choose fewer products or upgrade to Unlimited.`,
-                input: "products",
-                upgrade: true,
-              },
-            ],
-          };
-        }
+    const { configuredProducts, productLimit } = await import("../billing.server");
+    const otherProducts = await configuredProducts(shop, { exceptSet: existing?.id });
+    const total = new Set([...otherProducts, ...chosen]).size;
+
+    if (total > FREE_PRODUCT_LIMIT) {
+      let limit;
+      try {
+        limit = await productLimit(admin, shop, { maxAge: 0 });
+      } catch {
+        return { errors: ["Couldn’t check your plan with Shopify. Try saving again in a minute."] };
+      }
+      if (total > limit) {
+        return {
+          issues: [
+            {
+              message: `The Free plan covers options on up to ${limit} distinct products, and saving this would bring you to ${total.toLocaleString("en-US")}. Choose fewer products or upgrade to Pro.`,
+              input: "products",
+              upgrade: true,
+            },
+          ],
+        };
       }
     }
   }

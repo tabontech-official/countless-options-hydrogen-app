@@ -1,3 +1,9 @@
 {
-  "buildCommand": "npx prisma generate && npx react-router build"
+  "buildCommand": "npx prisma generate && npx react-router build",
+  "crons": [
+    {
+      "path": "/api/cron/billing-reconcile",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }

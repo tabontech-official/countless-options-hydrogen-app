@@ -1,5 +1,5 @@
 import prisma from "./db.server";
-import { forgetPlan, productLimit, productsWithOptions } from "./billing.server";
+import { forgetPlan, getEntitledProductIds, productLimit, productsWithOptions } from "./billing.server";
 import { METAFIELD_TYPES, appliesTo, hasPrices, mergeFields, rulesOf, rulesSearch } from "./options";
 
 export const BLOCK_HANDLE = "product_options";
@@ -297,7 +297,14 @@ async function linkAddon(admin, transform, variantId) {
 // Data in the merchant's own store stays theirs: uploaded files (they're attached to orders) and
 // the "Option add-ons" product, which Shopify no longer lets the app touch once uninstalled.
 export async function eraseShopData(shop) {
-  await prisma.$transaction([prisma.optionSet.deleteMany({ where: { shop } }), prisma.session.deleteMany({ where: { shop } })]);
+  const operations = [
+    prisma.optionSet.deleteMany({ where: { shop } }),
+    prisma.session.deleteMany({ where: { shop } }),
+  ];
+  if (prisma?.shopBilling) {
+    operations.push(prisma.shopBilling.deleteMany({ where: { shop } }));
+  }
+  await prisma.$transaction(operations);
   forgetPlan(shop); // this server instance's memory of the old plan goes too: a reinstall starts on Free
   pricingChecked.delete(shop);
 }
@@ -368,6 +375,44 @@ export async function applyAllSets(admin, shop) {
   for (const s of sets) ids.push(...(await ruleMatches(admin, s.rules)).ids);
   // Fresh: another server may still hold the Free answer from just before the upgrade.
   return syncProducts(admin, shop, ids, await productLimit(admin, shop, { maxAge: 0 }));
+}
+
+// Enforces the 100-product Free entitlement when a store with >100 products downgrades to Free.
+// Retains all configurations in Prisma, while removing storefront options from products beyond 100.
+export async function enforceFreeDowngrade(admin, shop) {
+  const sets = await prisma.optionSet.findMany({
+    where: { shop, status: "ACTIVE" },
+    select: { rules: true, products: { select: { productId: true } } },
+  });
+  const allIds = sets.flatMap((s) => s.products.map((p) => p.productId));
+  for (const s of sets) allIds.push(...(await ruleMatches(admin, s.rules)).ids);
+  const uniqueIds = [...new Set(allIds)];
+  if (uniqueIds.length <= 100) {
+    return syncProducts(admin, shop, uniqueIds, 100);
+  }
+
+  const entitledIds = new Set(await getEntitledProductIds(shop, 100));
+  const disabledIds = uniqueIds.filter((id) => !entitledIds.has(id));
+
+  // Sync options on the 100 entitled products
+  await syncProducts(admin, shop, Array.from(entitledIds), 100);
+
+  // Clear options on disabled products
+  if (disabledIds.length) {
+    const toDelete = disabledIds.map((id) => ({ ownerId: id, namespace: "$app", key: "options" }));
+    for (const metafields of chunks(toDelete, 25)) {
+      const data = await gql(
+        admin,
+        `#graphql
+        mutation ClearProductOptions($metafields: [MetafieldIdentifierInput!]!) {
+          metafieldsDelete(metafields: $metafields) { userErrors { field message } }
+        }`,
+        { metafields },
+      );
+      const [error] = data.metafieldsDelete.userErrors;
+      if (error) console.warn(`Couldn't clear disabled product options: ${error.message}`);
+    }
+  }
 }
 
 // The store's product metafield definitions (not an app's own "app--" namespace). Types a

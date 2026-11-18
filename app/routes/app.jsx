@@ -13,7 +13,13 @@ export const loader = async ({ request }) => {
   const { searchParams } = new URL(request.url);
   const shop = searchParams.get("shop");
   if (shop?.endsWith(".myshopify.com") && !searchParams.has("host")) {
-    throw redirect(`https://admin.shopify.com/store/${shop.replace(".myshopify.com", "")}/apps/${process.env.SHOPIFY_API_KEY}/app`);
+    const store = shop.replace(".myshopify.com", "");
+    // eslint-disable-next-line no-undef
+    const targetUrl = new URL(`https://admin.shopify.com/store/${store}/apps/${process.env.SHOPIFY_API_KEY}/app`);
+    for (const [key, val] of searchParams.entries()) {
+      if (key !== "shop") targetUrl.searchParams.set(key, val);
+    }
+    throw redirect(targetUrl.toString());
   }
   const { admin, session } = await authenticate.admin(request);
   // Recreates the pricing setup if it went missing (e.g. after a reinstall); never blocks the page.

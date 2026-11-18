@@ -6,22 +6,38 @@ import { authenticate, notifySubscription } from "../shopify.server";
 import prisma from "../db.server";
 import { FIELD_TYPES, hasPrices } from "../options";
 import { applyAllSets, countProducts, gql, isBlockInTheme, themeEditorUrl } from "../options.server";
-import { FREE_PRODUCT_LIMIT, getPlan, setUpgradePending, upgradePending } from "../billing.server";
+import { FREE_PRODUCT_LIMIT, forgetPlan, getPlan, setUpgradePending, upgradePending } from "../billing.server";
 import { TEMPLATES } from "../templates";
 import { plural } from "../components/OptionSetsTable";
 import { Brand } from "../components/Brand";
 import { TryIt } from "../components/TryIt";
 import { Ring } from "../components/Ring";
 import { Capabilities } from "../components/Capabilities";
-import { PlanCard } from "../components/PlanCard";
+import { PlanCard, formatDate } from "../components/PlanCard";
 import { TemplateGallery } from "../components/TemplateGallery";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const { shop } = session;
-  // Set while an upgrade waits for the merchant's approval, or is approved but not applied yet: read the plan fresh.
-  const pending = await upgradePending(admin).catch(() => false);
-  if (pending) console.log(`[DASHBOARD] ${shop}: upgrade pending, fetching fresh plan`);
+  // Shopify's hosted pricing page sends the merchant back with ?charge_id=…; the hosted flow no longer sets the
+  // "pending" mark, so that parameter (or a leftover mark) means: read the plan fresh from Shopify, never from cache.
+  const returnedFromBilling = new URL(request.url).searchParams.has("charge_id");
+  const marked = await upgradePending(admin).catch(() => false);
+  const pending = marked || returnedFromBilling;
+  if (pending) {
+    console.log(`[DASHBOARD] ${shop}: back from billing, fetching fresh plan`);
+    forgetPlan(shop);
+  }
+  const freshPlan = async () => {
+    // Shopify can take a few seconds to show a just-approved subscription, so a Free answer is re-checked.
+    let p = await getPlan(admin, shop, { maxAge: 0 });
+    for (let attempt = 1; returnedFromBilling && !p.unlimited && attempt <= 3; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      forgetPlan(shop);
+      p = await getPlan(admin, shop, { maxAge: 0 });
+    }
+    return p;
+  };
   const [latest, activeSets, draft, products, totalProducts, blockAdded, shopName, plan] = await Promise.all([
     prisma.optionSet.findFirst({ where: { shop }, orderBy: { updatedAt: "desc" }, select: { id: true } }),
     prisma.optionSet.findMany({ where: { shop, status: "ACTIVE" }, select: { fields: true } }),
@@ -42,9 +58,9 @@ export const loader = async ({ request }) => {
     )
       .then((data) => data.shop.name)
       .catch(() => null),
-    getPlan(admin, shop, { maxAge: pending ? 0 : 30_000 })
+    (pending ? freshPlan() : getPlan(admin, shop, { maxAge: 30_000 }))
       .then((p) => {
-        if (pending) console.log(`[DASHBOARD] ${shop}: plan after billing: ${p.unlimited ? "Unlimited" : "Free"}`);
+        if (pending) console.log(`[DASHBOARD] ${shop}: plan after billing: ${p.effectivePlan}`);
         return p;
       })
       .catch((err) => {
@@ -72,6 +88,12 @@ export const loader = async ({ request }) => {
     blockAdded,
     // The plan as Shopify has it, for the plan card (null when it couldn't be checked).
     unlimited: plan ? plan.unlimited : null,
+    isPro: plan ? plan.isPro : null,
+    selectedPlan: plan ? plan.selectedPlan : null,
+    effectivePlan: plan ? plan.effectivePlan : null,
+    isDowngrading: plan ? plan.isDowngrading : false,
+    currentPeriodEnd: plan ? plan.currentPeriodEnd : null,
+    downgradeDate: plan ? plan.downgradeDate : null,
     limit: FREE_PRODUCT_LIMIT,
     // Back from approval: the action settles it (applies the sets, or says it wasn't approved).
     settling: pending && Boolean(plan),
@@ -114,7 +136,26 @@ export default function Dashboard() {
   const data = useLoaderData();
   const shopify = useAppBridge();
   const applying = useFetcher();
+  const upgradeFetcher = useFetcher();
+  const isUpgrading = upgradeFetcher.state !== "idle";
   const asked = useRef(false);
+
+  const handleUpgrade = () => {
+    upgradeFetcher.submit({}, { method: "POST", action: "/app/upgrade" });
+  };
+
+  useEffect(() => {
+    if (upgradeFetcher.data?.confirmationUrl) {
+      if (window.top) {
+        window.top.location.href = upgradeFetcher.data.confirmationUrl;
+      } else {
+        window.location.href = upgradeFetcher.data.confirmationUrl;
+      }
+    } else if (upgradeFetcher.data?.error) {
+      shopify.toast.show(upgradeFetcher.data.error, { isError: true });
+    }
+  }, [upgradeFetcher.data, shopify]);
+
   useEffect(() => {
     // Once is enough: the action clears the mark, so a reload doesn't settle it again.
     if (!data.settling || asked.current) return;
@@ -122,7 +163,7 @@ export default function Dashboard() {
     applying.submit({}, { method: "post" });
   }, [data.settling, applying]);
   useEffect(() => {
-    if (applying.data?.applied) shopify.toast.show("Unlimited is on. Every product your option sets cover has options.");
+    if (applying.data?.applied) shopify.toast.show("Pro plan is active. Every product your option sets cover has options.");
   }, [applying.data, shopify]);
   const { active, draft, productCount, blockAdded, latestId } = data;
   const hasSets = active + draft > 0;
@@ -153,17 +194,17 @@ export default function Dashboard() {
     <s-page heading="Dashboard" inlineSize="large">
       <div className="co-wrap co-animate">
         {applying.state !== "idle" && (
-          <s-banner tone="info" heading="Unlimited is on">
+          <s-banner tone="info" heading="Pro plan is activating">
             Adding options to every product your option sets cover…
           </s-banner>
         )}
         {applying.data?.applied === false && (
-          <s-banner tone="warning" heading="Unlimited is on, but some products weren’t updated">
+          <s-banner tone="warning" heading="Pro is active, but some products weren’t updated">
             Open an option set and save it to add its options to every product.
           </s-banner>
         )}
         {applying.data?.declined && (
-          <s-banner tone="warning" heading="Unlimited wasn’t approved">
+          <s-banner tone="warning" heading="Pro upgrade wasn’t approved">
             Your store is still on the Free plan. You can try again from Plans.
           </s-banner>
         )}
@@ -172,15 +213,34 @@ export default function Dashboard() {
             Reload this page in a minute. Your options keep working in the meantime.
           </s-banner>
         )}
+        {data.isDowngrading && (
+          <s-banner tone="warning" heading="Downgrade scheduled">
+            Your Pro features remain available until {formatDate(data.currentPeriodEnd || data.downgradeDate)}. After that, your store will use the Free plan with a 100-product limit.
+          </s-banner>
+        )}
         <Hero data={data} hasSets={hasSets} live={live} steps={steps} />
         {!live && <SetupSteps steps={steps} />}
         <Kpis data={data} />
         {data.unlimited !== null && (
-          <PlanCard unlimited={data.unlimited} used={productCount} limit={data.limit}>
+          <PlanCard
+            unlimited={data.unlimited}
+            used={productCount}
+            limit={data.limit}
+            selectedPlan={data.selectedPlan}
+            effectivePlan={data.effectivePlan}
+            isDowngrading={data.isDowngrading}
+            currentPeriodEnd={data.currentPeriodEnd}
+            configuredCount={productCount}
+          >
             {!data.unlimited && (
-              <Link className="co-btn co-btn--dark co-btn--small" to="/app/plans">
-                Upgrade to Unlimited
-              </Link>
+              <button
+                type="button"
+                onClick={handleUpgrade}
+                disabled={isUpgrading}
+                className="co-btn co-btn--dark co-btn--small"
+              >
+                {isUpgrading ? "Redirecting to Shopify..." : "Upgrade to Pro"}
+              </button>
             )}
           </PlanCard>
         )}

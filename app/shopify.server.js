@@ -7,7 +7,7 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
-import { UNLIMITED_PLAN, UNLIMITED_PRICE } from "./options";
+import { PLAN_PRO, PRO_PRICE } from "./options";
 
 const appUrl =
   process.env.SHOPIFY_APP_URL ||
@@ -149,10 +149,10 @@ export async function notifySubscription(admin, shop) {
       shop,
       makePayload(s, {
         event: "subscription_approved",
-        purchase_name: UNLIMITED_PLAN,
-        purchase_status: "UNLIMITED PLAN ACTIVATED",
-        subscription_plan: UNLIMITED_PLAN,
-        subscription_price: `$${UNLIMITED_PRICE} / month`,
+        purchase_name: PLAN_PRO,
+        purchase_status: "PRO PLAN ACTIVATED",
+        subscription_plan: PLAN_PRO,
+        subscription_price: `$${PRO_PRICE} / month`,
       }),
     );
   } catch (error) {
@@ -169,13 +169,31 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new SessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-  // The paid plan (Shopify's Billing API). Free needs no subscription: it's every shop's default.
-  // The Plans page (routes/app.plans.jsx) requests and cancels it; billing.server.js reads it.
+  // The paid plan. Free needs no subscription: it's every shop's default.
+  // The Plans page requests and cancels it; billing.server.js reads and reconciles it.
   billing: {
-    [UNLIMITED_PLAN]: {
+    "The Elevate": {
       lineItems: [
         {
-          amount: UNLIMITED_PRICE,
+          amount: PRO_PRICE,
+          currencyCode: "USD",
+          interval: BillingInterval.Every30Days,
+        },
+      ],
+    },
+    [PLAN_PRO]: {
+      lineItems: [
+        {
+          amount: PRO_PRICE,
+          currencyCode: "USD",
+          interval: BillingInterval.Every30Days,
+        },
+      ],
+    },
+    Unlimited: {
+      lineItems: [
+        {
+          amount: PRO_PRICE,
           currencyCode: "USD",
           interval: BillingInterval.Every30Days,
         },

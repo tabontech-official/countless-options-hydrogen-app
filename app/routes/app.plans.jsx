@@ -2,135 +2,248 @@ import { useEffect, useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate, appUrl } from "../shopify.server";
-import { forgetPlan, getPlan, productsWithOptions, setUpgradePending } from "../billing.server";
-import { FREE_PRODUCT_LIMIT, UNLIMITED_PLAN, UNLIMITED_PRICE } from "../options";
-import { PlanCard } from "../components/PlanCard";
+import { authenticate } from "../shopify.server";
+import {
+  cancelSubscription,
+  configuredProducts,
+  forgetPlan,
+  getEntitledProductIds,
+  getPlan,
+  setChosenDowngradeProducts,
+} from "../billing.server";
+import { enforceFreeDowngrade, getProducts } from "../options.server";
+import { FREE_PRODUCT_LIMIT, PLAN_FREE, PLAN_PRO, PRO_PRICE } from "../options";
+import { PlanCard, formatDate } from "../components/PlanCard";
 
-// "Plans" in the nav: the shop's plan and usage, and the only place to change it. Free is every
-// store's default. Upgrading requests the Unlimited subscription (Billing API): Shopify shows the
-// merchant its approval page, then sends them back to the dashboard (returnUrl), which gives every
-// product its options. Switching to Free cancels the subscription right here.
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
-  const [plan, used] = await Promise.all([
-    getPlan(admin, session.shop, { maxAge: 0 }).catch(() => null), // always the plan as it is now
-    productsWithOptions(session.shop).then((ids) => ids.length),
+  const shop = session.shop;
+
+  const [plan, allAssignedIds] = await Promise.all([
+    getPlan(admin, shop, { maxAge: 0 }).catch(() => null),
+    configuredProducts(shop),
   ]);
-  // null when Shopify couldn't say: the page shows both plans without claiming either.
-  return { current: plan ? (plan.unlimited ? "Unlimited" : "Free") : null, used };
+
+  const isOverLimit = allAssignedIds.length > FREE_PRODUCT_LIMIT;
+
+  let assignedProductsList = [];
+  let currentlyEntitled = [];
+  if (isOverLimit) {
+    [currentlyEntitled, assignedProductsList] = await Promise.all([
+      getEntitledProductIds(shop, FREE_PRODUCT_LIMIT),
+      getProducts(admin, allAssignedIds.slice(0, 250)),
+    ]);
+  }
+
+  return {
+    shop,
+    plan,
+    configuredCount: allAssignedIds.length,
+    isOverLimit,
+    assignedProductsList,
+    entitledProductIds: currentlyEntitled,
+  };
 };
 
 export const action = async ({ request }) => {
-  const { admin, billing, session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const { shop } = session;
-  const { intent } = await request.json();
-  let plan;
-  try {
-    plan = await getPlan(admin, shop, { maxAge: 0 });
-  } catch {
-    return { error: "We couldn’t reach Shopify. Try again in a minute." };
+
+  let body = {};
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    body = await request.json();
+  } else {
+    const formData = await request.formData();
+    body = Object.fromEntries(formData.entries());
   }
 
-  if (intent === "upgrade") {
-    if (plan.unlimited) return { toast: "You’re already on Unlimited" };
+  const { intent } = body;
+
+  if (intent === "downgrade_to_free") {
     try {
-      forgetPlan(shop); // read it again once they’re back
-      await setUpgradePending(admin, true); // the dashboard settles it when they're back (app._index.jsx)
-      // billing.request() throws or returns a Response to redirect to Shopify’s approval page.
-      // Development stores get a test charge, so they’re never billed.
-      if (!appUrl) throw new Error("SHOPIFY_APP_URL not set");
-      const returnUrl = `${appUrl}/app?shop=${shop}`; // the app opens outside the admin on return, so it needs the shop
-      console.log(`[PLAN] ${shop}: requesting billing for ${UNLIMITED_PLAN}, returnUrl=${returnUrl}`);
-      let result;
-      try {
-        result = await billing.request({
-          plan: UNLIMITED_PLAN,
-          isTest: plan.devStore,
-          returnUrl,
-        });
-        console.log(`[PLAN] ${shop}: billing.request returned:`, result?.status, result?.constructor?.name);
-      } catch (err) {
-        console.log(`[PLAN] ${shop}: billing.request threw:`, err?.status, err?.constructor?.name);
-        throw err;
-      }
-      // If billing.request returns a Response instead of throwing it, throw it here
-      if (result instanceof Response) {
-        console.log(`[PLAN] ${shop}: throwing returned Response with status ${result.status}`);
-        throw result;
-      }
-      console.log(`[PLAN] ${shop}: billing.request completed with unexpected result type:`, typeof result);
-    } catch (error) {
-      if (handOver(error)) {
-        console.log(`[PLAN] ${shop}: Response caught by handOver, throwing`);
-        throw error;
-      }
-      console.error(`[PLAN] ${shop}: couldn’t start the upgrade:`, error?.message ?? error, error?.stack);
-      return { error: `Couldn’t start upgrade: ${error?.message || "Unknown error"}. Check console logs.` };
+      await cancelSubscription(admin, shop);
+      await enforceFreeDowngrade(admin, shop);
+      return { toast: "Successfully switched to Free plan." };
+    } catch (err) {
+      console.error("[PLANS] Downgrade failed:", err);
+      return { error: err?.message || "Failed to switch to Free plan." };
     }
   }
 
-  if (intent === "downgrade") {
-    if (plan.subscriptionId) {
-      try {
-        // prorate: the merchant gets credit for the unused part of the month.
-        await billing.cancel({ subscriptionId: plan.subscriptionId, isTest: plan.devStore, prorate: true });
-        console.log(`[PLAN] ${shop}: moved to Free (subscription cancelled)`);
-      } catch (error) {
-        if (handOver(error)) throw error;
-        console.error(`[PLAN] ${shop}: couldn't cancel the subscription:`, error);
-        // Fine if it's gone anyway (say, a second click cancelled it first).
-        const now = await getPlan(admin, shop, { maxAge: 0 }).catch(() => null);
-        if (!now || now.unlimited) return { error: "We couldn’t switch you to Free. Try again in a minute." };
-      }
+  if (intent === "save_chosen_products") {
+    const { productIds } = body;
+    if (!Array.isArray(productIds)) {
+      return { error: "Invalid product selection." };
     }
+    const chosen = await setChosenDowngradeProducts(shop, productIds);
     forgetPlan(shop);
-    return { toast: "You’re on the Free plan now" };
+    const plan = await getPlan(admin, shop, { maxAge: 0 }).catch(() => null);
+    if (plan && plan.effectivePlan === PLAN_FREE) {
+      await enforceFreeDowngrade(admin, shop);
+    }
+    return { toast: `Saved ${chosen.length} active products for Free plan.` };
   }
+
   return null;
 };
 
-// Responses the library throws on purpose: the redirect to Shopify's approval page and session
-// retries (401, carried by App Bridge), or a redirect. Anything else is a failure to report.
-const handOver = (error) => error instanceof Response && (error.status === 401 || (error.status >= 300 && error.status < 400));
-
 const PLANS = [
   {
-    name: "Free",
+    name: PLAN_FREE,
     price: "$0",
+    interval: "forever",
     features: [
-      `Options on up to ${FREE_PRODUCT_LIMIT} products`,
+      `Options on up to ${FREE_PRODUCT_LIMIT} distinct assigned products`,
       "Every answer type, conditions and paid add-ons",
       "Works with any Online Store 2.0 theme",
+      "Saved configurations preserved on downgrade",
     ],
   },
   {
-    name: "Unlimited",
-    price: `$${UNLIMITED_PRICE}`,
-    per: "/ month",
-    features: ["Options on every product", "New products get options automatically", "Everything in Free"],
+    name: PLAN_PRO,
+    price: `$${PRO_PRICE}`,
+    interval: "/ 30 days",
+    features: [
+      "Unlimited assigned products",
+      "New products get options automatically",
+      "All answer types, conditions and add-on transforms",
+      "Priority feature access & instant restoration",
+    ],
   },
 ];
 
 export default function Plans() {
-  const { current, used } = useLoaderData();
+  const {
+    plan,
+    configuredCount,
+    isOverLimit,
+    assignedProductsList,
+    entitledProductIds,
+  } = useLoaderData();
   const shopify = useAppBridge();
-  const change = useFetcher();
-  const [confirming, setConfirming] = useState(false);
-  const busy = change.state !== "idle" ? change.json?.intent : null;
-  const post = (intent) => change.submit({ intent }, { method: "post", encType: "application/json" });
+  const fetcher = useFetcher();
+
+  const [selectedIds, setSelectedIds] = useState(new Set(entitledProductIds || []));
+  const [filterText, setFilterText] = useState("");
 
   useEffect(() => {
-    if (change.data?.toast) shopify.toast.show(change.data.toast);
-    if (change.data?.error) shopify.toast.show(change.data.error, { isError: true });
-    if (change.data) setConfirming(false);
-  }, [change.data, shopify]);
+    if (fetcher.data?.toast) shopify.toast.show(fetcher.data.toast);
+    if (fetcher.data?.error) shopify.toast.show(fetcher.data.error, { isError: true });
+  }, [fetcher.data, shopify]);
+
+  const effectivePlan = plan?.effectivePlan || PLAN_FREE;
+  const isPro = effectivePlan === PLAN_PRO;
+  const isDowngrading = Boolean(plan?.isDowngrading);
+
+  const toggleProduct = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        if (next.size >= FREE_PRODUCT_LIMIT) {
+          shopify.toast.show(`Maximum ${FREE_PRODUCT_LIMIT} products can be selected on Free plan.`, { isError: true });
+          return prev;
+        }
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const saveSelection = () => {
+    fetcher.submit(
+      { intent: "save_chosen_products", productIds: Array.from(selectedIds) },
+      { method: "post", encType: "application/json" }
+    );
+  };
+
+  const filteredProducts = assignedProductsList.filter((p) =>
+    p.title.toLowerCase().includes(filterText.toLowerCase())
+  );
+
+  const upgradeFetcher = useFetcher();
+  const isUpgrading = upgradeFetcher.state !== "idle";
+
+  const downgradeFetcher = useFetcher();
+  const isDowngradingToFree = downgradeFetcher.state !== "idle";
+
+  const handleUpgrade = () => {
+    upgradeFetcher.submit({}, { method: "POST", action: "/app/upgrade" });
+  };
+
+  const handleDowngrade = () => {
+    if (
+      !confirm(
+        "Are you sure you want to switch to the Free plan? If you have more than 100 products with options, your chosen 100 products will stay active."
+      )
+    ) {
+      return;
+    }
+    downgradeFetcher.submit({ intent: "downgrade_to_free" }, { method: "POST" });
+  };
+
+  useEffect(() => {
+    if (downgradeFetcher.data?.toast) {
+      shopify.toast.show(downgradeFetcher.data.toast);
+    }
+    if (downgradeFetcher.data?.error) {
+      shopify.toast.show(downgradeFetcher.data.error, { isError: true });
+    }
+  }, [downgradeFetcher.data, shopify]);
+
+  useEffect(() => {
+    if (upgradeFetcher.data?.confirmationUrl) {
+      if (window.top) {
+        window.top.location.href = upgradeFetcher.data.confirmationUrl;
+      } else {
+        window.location.href = upgradeFetcher.data.confirmationUrl;
+      }
+    } else if (upgradeFetcher.data?.error) {
+      shopify.toast.show(upgradeFetcher.data.error, { isError: true });
+    }
+  }, [upgradeFetcher.data, shopify]);
 
   return (
-    <s-page heading="Plans" inlineSize="large">
+    <s-page heading="Plans & Subscriptions" inlineSize="large">
       <div className="co-wrap co-animate">
-        {current ? (
-          <PlanCard unlimited={current === "Unlimited"} used={used} limit={FREE_PRODUCT_LIMIT} />
+        {isDowngrading && (
+          <s-banner tone="warning" heading="Downgrade scheduled">
+            Your Pro features remain available until {formatDate(plan?.currentPeriodEnd || plan?.downgradeDate)}. After that, your store will use the Free plan with a 100-product limit.
+          </s-banner>
+        )}
+        {plan ? (
+          <PlanCard
+            unlimited={isPro}
+            used={configuredCount}
+            limit={FREE_PRODUCT_LIMIT}
+            selectedPlan={plan.selectedPlan}
+            effectivePlan={plan.effectivePlan}
+            isDowngrading={isDowngrading}
+            currentPeriodEnd={plan.currentPeriodEnd}
+            configuredCount={configuredCount}
+          >
+            {isPro ? (
+              <button
+                type="button"
+                onClick={handleDowngrade}
+                disabled={isDowngradingToFree}
+                className="co-btn co-btn--glass co-btn--small"
+              >
+                {isDowngradingToFree ? "Switching to Free..." : "Switch to Free"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleUpgrade}
+                disabled={isUpgrading}
+                className="co-btn co-btn--dark co-btn--small"
+              >
+                {isUpgrading ? "Redirecting to Shopify..." : "Upgrade to Pro"}
+              </button>
+            )}
+          </PlanCard>
         ) : (
           <s-banner tone="warning" heading="We couldn’t check your plan right now">
             Reload the page in a minute. Your options keep working in the meantime.
@@ -139,57 +252,136 @@ export default function Plans() {
 
         <div className="co-plans">
           {PLANS.map((p) => {
-            const isCurrent = p.name === current;
+            const isCurrent = (p.name === PLAN_PRO && isPro) || (p.name === PLAN_FREE && !isPro);
             return (
-              <section key={p.name} className={isCurrent ? "co-glass co-plantile co-plantile--current" : "co-glass co-plantile"}>
+              <section
+                key={p.name}
+                className={isCurrent ? "co-glass co-plantile co-plantile--current" : "co-glass co-plantile"}
+              >
                 <h3>
                   {p.name}
-                  {isCurrent && <span className="co-plantile__tag">Current plan</span>}
+                  {isCurrent && <span className="co-plantile__tag">Current feature access</span>}
                 </h3>
                 <p className="co-plantile__price">
                   {p.price}
-                  {p.per && <small>{p.per}</small>}
+                  {p.interval && <small>{p.interval}</small>}
                 </p>
                 <ul>
                   {p.features.map((f) => (
                     <li key={f}>{f}</li>
                   ))}
                 </ul>
-                {p.name === "Unlimited" && current === "Free" && (
-                  <button type="button" className="co-btn co-btn--dark co-btn--small" disabled={Boolean(busy)} onClick={() => post("upgrade")}>
-                    {busy === "upgrade" ? "Opening Shopify…" : "Upgrade to Unlimited"}
-                  </button>
-                )}
-                {p.name === "Free" && current === "Unlimited" &&
-                  (confirming ? (
-                    <div className="co-plantile__confirm">
-                      <span>Unlimited ends now, and you get credit for the rest of the month.</span>
-                      <button type="button" className="co-btn co-btn--dark co-btn--small" disabled={Boolean(busy)} onClick={() => post("downgrade")}>
-                        {busy === "downgrade" ? "Switching…" : "Switch to Free"}
-                      </button>
-                      <button type="button" className="co-btn co-btn--glass co-btn--small" disabled={Boolean(busy)} onClick={() => setConfirming(false)}>
-                        Keep Unlimited
-                      </button>
-                    </div>
-                  ) : (
-                    <button type="button" className="co-btn co-btn--glass co-btn--small" onClick={() => setConfirming(true)}>
-                      Switch to Free
+                <div style={{ marginTop: "16px" }}>
+                  {p.name === PLAN_PRO && !isPro && (
+                    <button
+                      type="button"
+                      onClick={handleUpgrade}
+                      disabled={isUpgrading}
+                      className="co-btn co-btn--dark co-btn--small"
+                    >
+                      {isUpgrading ? "Redirecting to Shopify..." : "Upgrade to Pro"}
                     </button>
-                  ))}
+                  )}
+                  {p.name === PLAN_FREE && isPro && (
+                    <button
+                      type="button"
+                      onClick={handleDowngrade}
+                      disabled={isDowngradingToFree}
+                      className="co-btn co-btn--dark co-btn--small"
+                    >
+                      {isDowngradingToFree ? "Switching to Free..." : "Switch to Free"}
+                    </button>
+                  )}
+                </div>
               </section>
             );
           })}
         </div>
-        <p className="co-plans__note">
-          Unlimited is billed by Shopify every 30 days on your Shopify bill. Switch back to Free anytime: products that
-          already have options keep them.
+
+        {isOverLimit && (
+          <section className="co-glass" style={{ padding: "20px", marginTop: "24px", borderRadius: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>
+                  Choose Active Products for Free Plan
+                </h3>
+                <p style={{ margin: "4px 0 0", color: "#666", fontSize: "14px" }}>
+                  You have {configuredCount} products configured across active option sets. On Free, select up to {FREE_PRODUCT_LIMIT} products that remain enabled ({selectedIds.size} selected). The other {configuredCount - selectedIds.size} remain saved safely in your database.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="co-btn co-btn--dark co-btn--small"
+                disabled={fetcher.state !== "idle"}
+                onClick={saveSelection}
+              >
+                {fetcher.state !== "idle" ? "Saving…" : "Save active 100 products"}
+              </button>
+            </div>
+
+            <div style={{ marginBottom: "12px" }}>
+              <input
+                type="text"
+                placeholder="Search assigned products…"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                style={{
+                  width: "100%",
+                  maxWidth: "400px",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid #ccc",
+                }}
+              />
+            </div>
+
+            <div style={{ maxHeight: "300px", overflowY: "auto", border: "1px solid #e1e3e5", borderRadius: "8px", background: "#fff" }}>
+              {filteredProducts.map((p) => {
+                const checked = selectedIds.has(p.id);
+                return (
+                  <label
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      padding: "10px 14px",
+                      borderBottom: "1px solid #f1f2f3",
+                      cursor: "pointer",
+                      background: checked ? "#f4f6f8" : "transparent",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleProduct(p.id)}
+                    />
+                    {p.image && (
+                      <img
+                        src={p.image}
+                        alt=""
+                        style={{ width: "32px", height: "32px", objectFit: "cover", borderRadius: "4px" }}
+                      />
+                    )}
+                    <span style={{ fontWeight: checked ? 600 : 400, flex: 1 }}>{p.title}</span>
+                    <span style={{ fontSize: "12px", color: checked ? "#2c6ecb" : "#8c9196" }}>
+                      {checked ? "Active on Free" : "Preserved in database"}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <p className="co-plans__note" style={{ marginTop: "24px" }}>
+          Countless Options subscriptions are billed through Shopify App Pricing every 30 days. You can upgrade, downgrade, or cancel anytime through Shopify. On downgrade, your Pro feature access remains fully active until the end of your verified paid billing period.
         </p>
       </div>
     </s-page>
   );
 }
 
-// Carries the redirect to Shopify's approval page (an App Bridge header) when the upgrade is requested.
 export const headers = (headersArgs) => {
   return boundary.headers(headersArgs);
 };

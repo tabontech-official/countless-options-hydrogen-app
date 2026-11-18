@@ -1,3 +1,4 @@
+/* eslint-env node */
 import { vercelPreset } from "@vercel/react-router/vite";
 
 export default {
